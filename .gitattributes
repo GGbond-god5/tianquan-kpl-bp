@@ -2,6 +2,15 @@
 * text=auto eol=lf
 
 # 二进制资源：不做任何换行转换
+#
+# ⚠️ 切片文件必须在此声明为 binary。上面的 `* text=auto eol=lf` 对未声明的
+#    扩展名会做换行转换，一旦被当成文本处理，二进制内容会被改写、拼接后哈希对不上。
+#    切片由本机 split 生成、经 API 上传、在 Actions 运行器里 cat 拼接后删除，
+#    见 .github/workflows/join-audio.yml。
+*.part0 binary
+*.part1 binary
+*.part2 binary
+
 *.mp3  binary
 *.png  binary
 *.jpg  binary

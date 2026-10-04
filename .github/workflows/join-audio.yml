@@ -1,0 +1,79 @@
+name: 拼接大体积音频
+
+# 为什么是"切片 + 拼接"而不是直接传整个文件：
+#   本机上行链路对 7MB 以上的单次 HTTP 提交不稳定 —— 走 REST 建 blob 会在
+#   约 60 秒时被截断（400 malformed request），走 git push 则报 408 RPC failed。
+#   切成约 6MB 的片段后，每个请求体都落回能稳定通过的范围。
+#
+# 为什么不从隧道下载（早期版本的做法）：
+#   实测 GitHub 机房经 Tailscale 中继回连本机极慢，18MB 跑满 15 分钟超时仍没下完，
+#   重试 5 轮就是 75 分钟，基本磨不出来。
+#   拼接在运行器本地用 cat 完成 —— 切片随 checkout 已在工作目录，不需要任何网络下载。
+#
+# 用法：先在本机把目标文件切成 <目标>.part0 / .part1 / ...，推送后用下方 sha256 手工触发。
+# 触发时务必填对 sha256，拼错了会被拦下，不会把坏文件提交进去。
+
+on:
+  workflow_dispatch:
+    inputs:
+      stem:
+        description: 目标文件（相对 audio/ 的路径，不含 .partN 后缀）
+        required: true
+        default: music/06_LCK2025.mp3
+      sha256:
+        description: 拼接结果的期望 sha256（本地对原始文件算）
+        required: true
+        default: e1ff638fbc4731a55d8fd890e99bde1b32df2993b1e40fff40d2b48b0bc7400c
+
+permissions:
+  contents: write
+
+jobs:
+  join:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 拼接并校验
+        env:
+          STEM: ${{ inputs.stem }}
+          WANT: ${{ inputs.sha256 }}
+        run: |
+          set -euo pipefail
+          out="audio/$STEM"
+
+          shopt -s nullglob
+          parts=( "$out".part* )
+          if [ "${#parts[@]}" -eq 0 ]; then
+            echo "::error::找不到任何切片：$out.part*"
+            exit 1
+          fi
+
+          echo "找到 ${#parts[@]} 个切片："
+          for p in "${parts[@]}"; do
+            echo "  $p  $(stat -c%s "$p") 字节"
+          done
+
+          cat "${parts[@]}" > "$out"
+
+          got=$(sha256sum "$out" | cut -d' ' -f1)
+          if [ "$got" != "$WANT" ]; then
+            echo "::error::拼接结果校验不符：期望 $WANT，实际 $got"
+            exit 1
+          fi
+          echo "✓ $out  $(stat -c%s "$out") 字节  sha256 ${got:0:12}…"
+
+          rm -f "${parts[@]}"
+
+      - name: 提交
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A audio
+          if git diff --cached --quiet; then
+            echo "内容无变化，跳过提交"
+            exit 0
+          fi
+          git commit -m "拼接音频：${{ inputs.stem }}（切片已删除）"
+          git push
