@@ -27,8 +27,9 @@
  *  - 第 7 局（巅峰对决）自动接管：清单里标了 peak 的曲目顶替用户选择，
  *    前提是音乐总开关是开的。用户在巅峰局手动换曲则本局内尊重手动选择，
  *    下一局重新接管。
- *  - 资源预热：进入导播模式后后台把语音全量与当前曲目灌进 HTTP 缓存，
- *    把"点击后才开始下载"的等待挪到用户还在摆布局的时候（见 warmCache）。
+ *  - 资源预热：进入导播模式后后台把语音全量与当前曲目取进内存、转成
+ *    blob URL，把"点击后才开始下载"的等待挪到用户还在摆布局的时候，
+ *    点击时零网络（见 warmCache）。
  * ============================================================ */
 (function () {
   "use strict";
@@ -99,40 +100,80 @@
   }
 
   /* ---------- 预热：把"点击后才下载"改成"进导播就后台下好" ----------
-   * 原来 preload="none" + 点击时才设 src，等于把整段下载时间摊到点击之后；
-   * 加上音频是强缓存资源，先在空闲时段灌进浏览器 HTTP 缓存，点击时命中缓存即可出声。
+   * 原来 preload="none" + 点击时才设 src，等于把整段下载时间摊到点击之后。
    *
-   * 语音总量只有约 11 MB（132 个文件，平均 80 KB），全量预热是划算的；
-   * 音乐只热当前选中那一首 —— 单曲 3~18 MB，全热不划算。
+   * 为什么不是"灌进 HTTP 缓存"就完事：`fetch()` 填的是 HTTP 磁盘缓存，
+   * 而 `<audio>` 走浏览器另一套**媒体缓存**，两者不保证共享 —— 预热跑完了，
+   * 点击时媒体元素仍可能重新发一次请求，那 2~12 秒的首字节又等一遍。
+   * 所以这里不再只写缓存，而是把字节收进内存、转成 blob URL 交给播放器：
+   * blob 是本地地址，点击时零网络、零等待。
+   *
+   * 内存代价：语音全量约 10 MB（132 个，平均 80 KB），常驻划算；
+   * 音乐单曲 3~18 MB，只留当前那一份，换曲时释放旧的。
+   *
+   * 并发取 8 而不是 3：这一层是**延迟受限**而非带宽受限 —— 每个请求首字节
+   * 要 2~12 秒，小并发等于把这 132 次首字节排成一条长队。
    *
    * 只在首次进入导播模式时启动：在此之前 playVoice() 也会直接返回，
    * 预热了也没人会听，白白占带宽。
    */
+  const voiceBlobs = new Map();   // 语音 file -> blob URL（全量常驻）
+  let musicBlob = null;           // { file, url } —— 只保留当前曲目那一份
+
   let warmStarted = false;
   function warmCache() {
     if (warmStarted) return;
     warmStarted = true;
 
     const track = effectiveTrack();
-    if (track && track.file) void warmOne(track.file);
+    if (track && track.file) void warmMusic(track.file);
 
     const files = (manifest?.voice || []).map((v) => v.file).filter(Boolean);
     let i = 0;
-    const CONC = 3;   // 别把连接占满，否则会拖慢正在播放的音频
+    const CONC = 8;
     const worker = async () => {
-      while (i < files.length) await warmOne(files[i++]);
+      while (i < files.length) await warmVoice(files[i++]);
     };
     for (let k = 0; k < CONC; k++) void worker();
   }
 
-  /** 取一个音频进缓存；失败静默 —— 预热是尽力而为，不能影响正常播放。
-   *  必须把 body 读掉：只拿到 Response 不读，浏览器可能在对象回收时中断下载，
-   *  HTTP 缓存就填不上，预热等于白做。 */
-  async function warmOne(file) {
+  /** 播放时实际用的地址：预热好的走本地 blob，还没热到就退回网络。 */
+  function mediaUrl(file) {
+    if (file.startsWith("music/")) {
+      return musicBlob && musicBlob.file === file ? musicBlob.url : audioUrl(file);
+    }
+    return voiceBlobs.get(file) || audioUrl(file);
+  }
+
+  async function fetchBytes(file) {
+    const r = await fetch(audioUrl(file), { cache: "force-cache" });
+    if (!r.ok) return null;
+    return r.arrayBuffer();
+  }
+
+  async function warmVoice(file) {
+    if (voiceBlobs.has(file)) return;
     try {
-      const r = await fetch(audioUrl(file), { cache: "force-cache" });
-      if (r.ok) await r.arrayBuffer();
+      const buf = await fetchBytes(file);
+      if (!buf) return;
+      voiceBlobs.set(file, URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" })));
     } catch { /* 单个失败不影响其余 */ }
+  }
+
+  async function warmMusic(file) {
+    if (musicBlob && musicBlob.file === file) return;
+    try {
+      const buf = await fetchBytes(file);
+      if (!buf) return;
+      if (musicBlob && musicBlob.file === file) return;   // 并发里别人已备好
+      if (musicBlob) URL.revokeObjectURL(musicBlob.url);
+      musicBlob = { file, url: URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" })) };
+    } catch { /* 预热是尽力而为，不能影响正常播放 */ }
+    // 只在音乐停着时换 src —— 换 src 会打断正在播的曲子，而 blob 的价值
+    // 是"下次点播放不用等"，不是"打断当前播放"。
+    if (!bgm.paused) return;
+    if (wantFile() !== file) return;
+    syncMusic();
   }
 
   function applyVolume() {
@@ -206,7 +247,7 @@
   function syncMusic() {
     const file = wantFile();
     if (!file) { bgm.pause(); return; }
-    const want = audioUrl(file);
+    const want = mediaUrl(file);
     if (bgm.src !== want) {
       bgm.src = want;   // 用绝对地址，避免相对路径被解析到页面根
       bgm.currentTime = 0;
@@ -223,6 +264,14 @@
     if (peakMode && !peakOverridden && pt && currentKey !== String(pt.key)) peakOverridden = true;
     musicEnabled = true;
     syncMusic();
+    warmIfActive();
+  }
+
+  /** 换了曲目就把新曲也提前取进内存（原本只热了进导播时那一首）。 */
+  function warmIfActive() {
+    if (!active) return;
+    const t = effectiveTrack();
+    if (t && t.file) void warmMusic(t.file);
   }
 
   function setMusicEnabled(on) {
@@ -238,6 +287,7 @@
     peakMode = next;
     peakOverridden = false;   // 每次进出巅峰局都重新接管
     syncMusic();
+    warmIfActive();           // 巅峰曲也提前取好，别等第七局开场才下
   }
 
   function setVoiceEnabled(on) {
@@ -262,7 +312,7 @@
     if (!active || !voiceEnabled || !name) return;
     const file = voiceFileFor(name);
     if (!file) return;
-    const url = audioUrl(file);
+    const url = mediaUrl(file);
     if (voice.src !== url) voice.src = url;
     try { voice.currentTime = 0; } catch { /* 尚未 metadata，忽略 */ }
     safePlay(voice);
