@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>天权kpl全局bp模拟系统</title>
+  <!-- 内联 favicon：server.js 的静态白名单只放行 index.html/css/js，没有 /favicon.ico，
+       浏览器默认请求会 403 并在控制台留一条 error。这里用 data URI 直接消掉该噪声。 -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23131a2e'/%3E%3Cpath d='M16 5l9 5v12l-9 5-9-5V10z' fill='none' stroke='%23f5c542' stroke-width='2'/%3E%3Cpath d='M16 11v10M11 16h10' stroke='%233b82f6' stroke-width='2'/%3E%3C/svg%3E" />
+  <!-- 布局兜底（先于 style.css 解析，因此优先级更低：css/style.css 可随时覆盖本段）
+       目的：整列必须恰好装满一屏 —— 板子（.content）优先，动态面板不许把底部操作栏
+       挤出视口，也不许把板子压到裁切。内层由各面板自己滚动，整体不产生页面滚动条。 -->
+  <style>
+    #main-screen { height: 100vh; overflow: hidden; }
+    #main-screen .content { flex: 1 1 auto; min-height: 430px; }
+    #main-screen .analysis-bar { flex: 0 0 auto; }
+    /* 分析提示：内部滚动，配合 title 看全文，不再拦腰截断最后一行 */
+    #main-screen .analysis-notes {
+      overflow-y: auto; overscroll-behavior: contain;
+      scrollbar-width: thin; scrollbar-color: rgba(245,197,66,.45) transparent;
+    }
+    #main-screen .analysis-notes::-webkit-scrollbar { width: 6px; }
+    #main-screen .analysis-notes::-webkit-scrollbar-thumb {
+      background: rgba(245,197,66,.45); border-radius: 3px;
+    }
+    /* 动态面板：可收缩 + 内部滚动，绝不把底部操作栏推出去 */
+    #main-screen #ai-prediction { flex: 0 1 auto; min-height: 0; max-height: 46vh; }
+    #main-screen .ai-pred-body { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+    /* 收起态：战术板只留标题条，把高度还给板子与英雄池 */
+    #main-screen .ai-prediction.collapsed { max-height: none; }
+    #main-screen .ai-prediction.collapsed .ai-pred-body { display: none; }
+    #main-screen .ai-pred-title {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    #main-screen .ap-toggle {
+      flex: 0 0 auto; padding: 3px 12px; border-radius: 999px; cursor: pointer;
+      font-size: 11.5px; font-weight: 700; letter-spacing: .5px;
+      border: 1px solid rgba(245,197,66,.45); background: rgba(245,197,66,.10);
+      color: var(--gold, #f5c542); transition: background .15s, color .15s;
+    }
+    #main-screen .ap-toggle:hover { background: var(--gold, #f5c542); color: #1a1a1a; }
+    @media (max-height: 820px) {
+      #main-screen .content { min-height: 380px; }
+      #main-screen #ai-prediction { max-height: 34vh; }
+    }
+    /* 走势图：容器内自适应缩放，明细行结构化 */
+    #trend-chart svg { display: block; width: 100%; height: auto; }
+    #trend-chart .trend-detail {
+      margin-top: 14px; padding: 11px 14px; border-radius: 10px; font-size: 12.5px; line-height: 1.75;
+      border: 1px solid rgba(245,197,66,.26);
+      background: linear-gradient(180deg, rgba(245,197,66,.075), rgba(13,18,38,.35));
+    }
+    #trend-chart .trend-detail b { color: var(--gold, #f5c542); margin-right: 6px; }
+    #trend-chart .td-main { color: var(--text, #eef1f9); }
+    #trend-chart .td-key { color: #ffd98a; }
+    #trend-chart .td-phases {
+      color: var(--text, #eef1f9); font-size: 12px;
+      margin-top: 3px; padding-top: 3px;
+      border-top: 1px solid rgba(255, 255, 255, .08);
+      font-variant-numeric: tabular-nums;
+    }
+    #trend-chart .td-hint { color: var(--muted, #a7afcc); font-size: 11.5px; margin-top: 4px; opacity: .85; }
+    /* 大场复盘：模型命中率自检 */
+    .sv-acc {
+      margin-top: 9px; padding: 9px 11px; border-radius: 9px;
+      border: 1px solid rgba(245,197,66,.24);
+      background: linear-gradient(180deg, rgba(245,197,66,.06), rgba(13,18,38,.3));
+      font-size: 12px; line-height: 1.7;
+    }
+    .sv-acc-head { color: var(--gold, #f5c542); font-weight: 700; }
+    .sv-acc-cells { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+    .sv-acc-cell {
+      padding: 1px 8px; border-radius: 999px; font-variant-numeric: tabular-nums;
+      border: 1px solid rgba(255,255,255,.16); color: var(--text, #eef1f9);
+    }
+    .sv-acc-cell.hit { border-color: rgba(127,224,170,.5); background: rgba(60,200,130,.12); color: #9ff0c2; }
+    .sv-acc-cell.miss { border-color: rgba(255,156,156,.45); background: rgba(255,90,90,.10); color: #ffb4b4; }
+    .sv-acc-note { color: var(--muted, #a7afcc); font-size: 11px; opacity: .9; }
+  </style>
+  <link rel="stylesheet" href="css/style.css?v=20261002-finals-v5" />
+  <link rel="stylesheet" href="css/broadcast.css?v=20261002-finals-v5" />
+  <link rel="stylesheet" href="css/finals.css?v=20261002-finals-v5" />
+  <link rel="stylesheet" href="css/director.css?v=20261004-peakorder-v8" />
+</head>
+<body>
+
+  <!-- ============ 设置界面 ============ -->
+  <div id="setup-screen">
+    <div class="setup-card">
+      <h1>天权kpl全局bp模拟系统</h1>
+      <div class="subtitle">王者荣耀  全局BP </div>
+
+      <div class="mode-row">
+        <span class="opt-label">模式：</span>
+        <div class="mode-btns" id="mode-btns">
+          <button data-mode="solo" class="active">单机对战</button>
+          <button data-mode="online">联机对战</button>
+          <button data-mode="director">导播模式</button>
+        </div>
+      </div>
+
+      <div class="team-row">
+        <div class="team-field">
+          <label>🔵 蓝方队伍名称</label>
+          <input id="blue-name" class="blue-input" type="text" placeholder="请输入蓝方队伍名" value="蓝方" />
+        </div>
+        <div class="vs-label">VS</div>
+        <div class="team-field">
+          <label>🔴 红方队伍名称</label>
+          <input id="red-name" class="red-input" type="text" placeholder="请输入红方队伍名" value="红方" />
+        </div>
+      </div>
+
+      <div class="option-row">
+        <span class="opt-label">赛制：</span>
+        <div class="bo-btns" id="bo-btns">
+          <button data-bo="3">BO3</button>
+          <button data-bo="5">BO5</button>
+          <button data-bo="7" class="active">BO7</button>
+        </div>
+      </div>
+
+      <!-- 导播模式：一个人模拟整局，直接进转播板子 -->
+      <div id="director-hint" class="online-panel hidden">
+        <div class="online-box">
+          <p class="online-hint">进入<b style="color:var(--gold);">独立导播台</b>，控制双方选禁并播放英雄语音与赛事音乐。完成 BP 后点击“确定胜负方”，由败方选择下一局边路，继续本场全局 BP。队名与赛制使用上方设置。</p>
+        </div>
+      </div>
+
+      <button class="start-btn" id="start-btn">开始 BP</button>
+
+      <!-- 联机对战：创建房间 / 加入房间 -->
+      <div id="online-panel" class="online-panel hidden">
+        <div class="online-tabs">
+          <button id="tab-create" class="active">创建房间（房主 · 蓝方）</button>
+          <button id="tab-join">加入房间（客方 · 红方）</button>
+        </div>
+        <div id="online-create" class="online-box">
+          <p class="online-hint">房主在上方填好两队名与赛制，选择你方阵营。对方加入时也可自定己方队名。</p>
+          <div class="create-side-row">
+            <span class="opt-label">我方阵营：</span>
+            <div class="side-btns" id="create-side-btns">
+              <button data-side="blue" class="active">🔵 蓝方（先Ban先Pick）</button>
+              <button data-side="red">🔴 红方（后Ban后Pick）</button>
+            </div>
+          </div>
+          <button class="start-btn" id="btn-create-room">创建房间</button>
+          <div id="create-result" class="online-result hidden"></div>
+        </div>
+        <div id="online-join" class="online-box hidden">
+          <p class="online-hint">输入房主发的 4 位房间号；可在下方修改你的队伍名称（留空则用房主预设）。</p>
+          <div class="join-team-row">
+            <input id="join-team-name" type="text" placeholder="我方队伍名称（可修改）" maxlength="12" autocomplete="off" />
+          </div>
+          <div class="join-row">
+            <input id="join-code" type="text" placeholder="房间号" maxlength="4" autocomplete="off" />
+            <button class="start-btn" id="btn-join-room">加入房间</button>
+          </div>
+          <div id="join-error" class="online-error hidden"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 主界面 ============ -->
+  <div id="main-screen">
+    <!-- 美术层：Canvas 氛围粒子（流光/拖尾/景深/呼吸，见 js/fx.js） -->
+    <canvas id="fx-canvas" aria-hidden="true"></canvas>
+    <div class="finals-backdrop" aria-hidden="true"></div>
+    <!-- 顶部比分栏：官方转播版式 —— 左蓝右红队伍名对称，中央大比分 -->
+    <div class="top-bar">
+      <div class="tb-team tb-blue">
+        <img class="tb-logo" id="tb-blue-logo" alt="" aria-hidden="true" />
+        <span class="tb-side">蓝方</span>
+        <span class="tb-name" id="tb-blue-name">蓝方</span>
+      </div>
+      <div class="tb-center">
+        <span class="game-tag" id="game-tag">第 1 局</span>
+        <div class="series-score">
+          <span class="s-blue" id="score-blue">0</span>
+          <span class="sep">:</span>
+          <span class="s-red" id="score-red">0</span>
+        </div>
+        <span class="peak-tag hidden" id="peak-tag">巅峰对决 · 盲选</span>
+      </div>
+      <div class="tb-team tb-red">
+        <span class="tb-name" id="tb-red-name">红方</span>
+        <span class="tb-side">红方</span>
+        <img class="tb-logo" id="tb-red-logo" alt="" aria-hidden="true" />
+      </div>
+      <span class="online-status hidden" id="online-status">联机</span>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="content">
+      <!-- 四角金色边框（包住整个 BP 舞台） -->
+      <span class="corner-bracket cb-tl"></span><span class="corner-bracket cb-tr"></span><span class="corner-bracket cb-bl"></span><span class="corner-bracket cb-br"></span>
+      <!-- 蓝方面板 -->
+      <div class="team-panel blue-panel" id="blue-panel">
+        <div class="team-header">
+          <span class="side-badge">蓝方</span>
+          <img class="team-logo" id="blue-panel-logo" alt="" aria-hidden="true" />
+          <span class="team-name" id="blue-name-display">蓝方</span>
+          <span class="turn-indicator hidden" id="blue-turn">轮到你了</span>
+        </div>
+        <div class="section-label" id="blue-ban-label">禁用 Ban</div>
+        <div class="bans-grid" id="blue-bans"></div>
+        <div class="section-label">选用 Pick</div>
+        <div class="picks-grid" id="blue-picks"></div>
+        <div class="section-label">全局已用（本队后续不可再用）</div>
+        <div class="global-used">
+          <div class="used-heroes" id="blue-used"></div>
+        </div>
+      </div>
+
+      <!-- 英雄池 -->
+      <div class="pool-panel">
+        <div class="pool-header">
+          <input class="search-box" id="search-box" type="text" placeholder="搜索英雄..." />
+          <div class="filter-tabs" id="filter-tabs">
+            <button data-pos="全部" class="active">全部</button>
+            <button data-pos="对抗路">对抗路</button>
+            <button data-pos="打野">打野</button>
+            <button data-pos="中路">中路</button>
+            <button data-pos="发育路">发育路</button>
+            <button data-pos="游走">游走</button>
+          </div>
+        </div>
+        <div class="draft-status" id="draft-status">
+          <span class="phase">准备中</span>
+        </div>
+        <div class="hero-grid" id="hero-grid"></div>
+      </div>
+
+      <!-- 红方面板 -->
+      <div class="team-panel red-panel" id="red-panel">
+        <div class="team-header">
+          <span class="side-badge">红方</span>
+          <img class="team-logo" id="red-panel-logo" alt="" aria-hidden="true" />
+          <span class="team-name" id="red-name-display">红方</span>
+          <span class="turn-indicator hidden" id="red-turn">轮到你了</span>
+        </div>
+        <div class="section-label" id="red-ban-label">禁用 Ban</div>
+        <div class="bans-grid" id="red-bans"></div>
+        <div class="section-label">选用 Pick</div>
+        <div class="picks-grid" id="red-picks"></div>
+        <div class="section-label">全局已用（本队后续不可再用）</div>
+        <div class="global-used">
+          <div class="used-heroes" id="red-used"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 数据分析栏 -->
+    <div class="analysis-bar">
+      <div class="analysis-card blue-card">
+        <div class="a-title" id="blue-a-title">蓝方 阵容强度</div>
+        <div class="a-winrate" id="blue-winrate">--</div>
+      </div>
+      <div class="score-center"><div class="score-label"><span>BP POWER</span><span id="score-probability">等待阵容成形</span></div><div class="win-progress" id="score-meter" role="meter" aria-label="蓝方 BP 评分占比" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+        <div class="p-blue" id="p-blue" style="width:50%"></div>
+        <div class="p-red" id="p-red" style="width:50%"></div>
+      </div></div>
+      <div class="analysis-card red-card">
+        <div class="a-title" id="red-a-title">红方 阵容强度</div>
+        <div class="a-winrate" id="red-winrate">--</div>
+      </div>
+
+    </div>
+
+    <aside class="event-commentary" aria-live="polite"><div><span class="live-dot"></span>赛事点评<span class="commentary-en">MATCH INSIGHT</span></div><p id="event-commentary-text">阵容构建中，等待双方完成选人。</p><button data-module-open="coach">完整战术板 ↗</button></aside>
+
+    <!-- 底部操作栏 -->
+    <div class="bottom-bar">
+      <button id="btn-undo">↩ 撤销</button>
+      <button id="btn-endgame" class="primary">✓ 本局结束（录入胜负）</button>
+      <button data-module-open="insights">胜率解读</button>
+      <button data-module-open="coach">教练战术板</button>
+      <button data-module-open="data">英雄库 / 数据源</button>
+      <button id="btn-trend">📈 胜率走势</button>
+      <button id="btn-review">📖 复盘</button>
+      <button id="btn-stats">历史大场 / 数据</button>
+      <button id="btn-reset" class="danger">↺ 重新开局</button>
+    </div>
+    <div class="finals-rail"><span class="finals-rail-line"></span><strong>天权kpl全局bp模拟系统</strong><span class="finals-rail-line"></span></div>
+  </div>
+
+  <dialog id="module-dialog" aria-labelledby="module-title">
+    <header class="module-heading"><div><div class="eyebrow">DRAFT CONTROL ROOM</div><h2 id="module-title">BP 分析中心</h2></div><button id="module-close" aria-label="关闭模块">✕</button></header>
+    <nav class="module-tabs" role="tablist" aria-label="分析模块"><button role="tab" data-module-tab="insights">胜率解读</button><button role="tab" data-module-tab="coach">教练战术板</button><button role="tab" data-module-tab="data">英雄库 / 数据源</button></nav>
+    <div class="module-body">
+      <section data-module-panel="insights"><p id="analysis-notes"></p><div id="insights-content"></div></section>
+      <section data-module-panel="coach" hidden><p id="coach-placeholder">完成双方选人后生成四阶段战术建议。</p>    <!-- 教练战术板（BP 完成后本地规则式生成，可离线） -->
+    <div class="ai-prediction hidden" id="ai-prediction">
+      <div class="ai-pred-title">
+        <span class="ap-title-text">◢ 教练战术板 · 局内走势研判</span>
+        <!-- 收起态摘要：由 maybeGeneratePrediction 填入"结论"那一行。
+             这样短屏自动收起时，标题条上仍然看得到模型看好谁，不会等于什么都没显示。 -->
+        <span class="ap-summary" id="ai-pred-summary"></span>
+
+      </div>
+      <div class="ai-pred-body" id="ai-prediction-body"></div>
+    </div>
+
+</section>
+      <section data-module-panel="data" hidden>    <!-- 数据源栏 -->
+    <div class="data-source-bar" id="data-source-bar">
+      <span class="ds-label">📡 数据源</span>
+      <select id="season-select" class="season-select" title="选择赛季"></select>
+      <button id="btn-load-data" class="ds-btn">↻ 加载实时数据</button>
+      <span class="ds-status" id="ds-status">正在检测数据服务…</span>
+    </div>
+
+<div class="roster-sync"><h3>腾讯官方英雄库</h3><p id="roster-status"></p><button id="sync-heroes-btn">同步最新英雄</button><p>英雄资料与比赛胜率分别更新；新增英雄在缺少比赛样本时使用参考值。</p><p>元流之子五种形态共用一个 BP 名额：本队使用后整场锁定，巅峰对决双方可选。</p></div></section>
+    </div>
+  </dialog>
+
+  <!-- ============ 弹出定格画面 ============ -->
+  <div id="freeze-overlay">
+    <div class="freeze-particles" id="freeze-particles"></div>
+    <div class="freeze-card" id="freeze-card">
+      <div class="freeze-type" id="freeze-type">选用</div>
+      <div class="freeze-poster" id="freeze-poster">
+        <!-- 不写 src=""：空 src 会被浏览器解析成当前页面地址再请求一次。
+             真正的海报 src 由 showFreeze() 在拿到 URL 后赋值（拿不到就保持无 src）。 -->
+        <img class="freeze-img" id="freeze-img" alt="" />
+        <div class="freeze-fallback" id="freeze-fallback">⚔️</div>
+        <div class="freeze-poster-info">
+          <div class="freeze-hero-name" id="freeze-name">英雄</div>
+          <div class="freeze-hero-role" id="freeze-role">职业 · 分路</div>
+        </div>
+      </div>
+      <div class="freeze-team" id="freeze-team">蓝方</div>
+      <div class="freeze-tip">点击任意处关闭 · 自动定格 2 秒</div>
+    </div>
+  </div>
+
+  <!-- ============ 赛后结算弹窗 ============ -->
+  <div id="result-modal">
+    <div class="modal-card" style="position:relative;">
+      <button class="close-btn" id="result-close">✕</button>
+      <h2>本局谁获胜？</h2>
+      <div class="result-teams">
+        <div class="result-team blue-win" id="result-blue" data-winner="blue">
+          <div class="rt-name" id="result-blue-name">蓝方</div>
+          <div id="result-blue-lineup" class="a-title"></div>
+        </div>
+        <div class="result-team red-win" id="result-red" data-winner="red">
+          <div class="rt-name" id="result-red-name">红方</div>
+          <div id="result-red-lineup" class="a-title"></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="primary" id="result-confirm" style="padding:9px 24px;border:none;border-radius:9px;background:var(--gold);color:#1a1a1a;font-weight:700;">确认并进入下一局</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 巅峰对决选边弹窗 ============ -->
+  <div id="side-choice-modal">
+    <div class="modal-card" style="position:relative;">
+      <h2>败方选边</h2>
+      <p style="color:var(--muted);text-align:center;margin-bottom:18px;font-size:14px;">
+        上一局败方 <b id="side-choice-loser" style="color:var(--gold);">队伍</b> 请选择下一局边路
+      </p>
+      <div class="result-teams">
+        <div class="result-team blue-win" id="side-choose-blue">
+          <div class="rt-name">🔵 蓝方</div>
+          <div class="a-title">先 Ban 先 Pick</div>
+        </div>
+        <div class="result-team red-win" id="side-choose-red">
+          <div class="rt-name">🔴 红方</div>
+          <div class="a-title">后 Ban 后 Pick</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 胜率走势图弹窗 ============ -->
+  <div id="trend-modal">
+    <div class="stats-card" style="position:relative; width:min(720px,94vw);">
+      <button class="close-btn" id="trend-close">✕</button>
+      <h2>📈 胜率走势</h2>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">
+        当前 BP 过程中，蓝方预测胜率随每一手 Ban/Pick 的变化
+      </p>
+      <div id="trend-chart"></div>
+    </div>
+  </div>
+
+  <!-- ============ 往期复盘弹窗 ============ -->
+  <div id="review-modal">
+    <div class="stats-card" style="position:relative; width:min(920px,96vw);">
+      <button class="close-btn" id="review-close">✕</button>
+      <h2>📖 往期复盘（点击选/禁图框可换英雄）</h2>
+      <div class="review-tabs" id="review-tabs"></div>
+      <div class="review-bp" id="review-bp"></div>
+      <div class="review-trend" id="review-trend"></div>
+      <div class="review-analysis" id="review-analysis"></div>
+    </div>
+  </div>
+
+  <!-- ============ 换英雄选择弹窗 ============ -->
+  <div id="swap-modal">
+    <div class="modal-card" style="position:relative; width:min(680px,94vw);">
+      <button class="close-btn" id="swap-close">✕</button>
+      <h2 id="swap-title">换英雄</h2>
+      <div class="hero-grid" id="swap-grid" style="max-height:52vh;flex:1;"></div>
+    </div>
+  </div>
+
+  <!-- ============ 数据分析 / 历史记录弹窗 ============ -->
+  <div id="stats-modal">
+    <div class="stats-card" style="position:relative;">
+      <button class="close-btn" id="stats-close">✕</button>
+      <h2>📊 数据分析 & 历史记录</h2>
+      <div class="stats-tabs">
+        <button data-tab="heroes" class="active">英雄数据</button>
+        <button data-tab="matches">比赛记录</button>
+      </div>
+      <div class="stats-body" id="stats-body"></div>
+    </div>
+  </div>
+
+
+  <!-- ============ 导播模式 · 转播板子 ============
+       布局参照 wucebp.top 的征召舞台：左右各 5 个 pick 竖列，中央队卡/计时/
+       ban 槽，下方英雄池。配色与动效沿用本系统令牌，见 css/director.css。 -->
+  <div id="director-screen" aria-label="导播转播板子">
+    <div class="dir-head">
+      <span class="dh-event">天权 KPL 全局 BP · 导播台</span>
+      <span class="dh-game">第 1 局</span>
+      <span class="dh-spacer"></span>
+      <span class="dh-chip role">单人模拟</span>
+      <button class="dir-btn ghost" data-dir-undo>↩ 撤销上一手</button>
+      <button class="dir-btn" data-dir-result disabled>确定胜负方 · 下一局</button>
+      <button class="dir-btn ghost" data-dir-exit>✕ 退出导播</button>
+    </div>
+
+    <div class="dir-body">
+      <!-- 蓝方 pick 竖列 -->
+      <div class="dir-col blue">
+        <div class="dir-col-label">BLUE PICK</div>
+        <div class="dir-picks"></div>
+      </div>
+
+      <div class="dir-emblem" aria-hidden="true"><span>GLOBAL BP</span><strong>天权 KPL</strong><small>全局征召</small></div>
+      <div class="dir-mid">
+        <!-- 比分 / 计时 / ban -->
+        <div class="dir-top">
+          <div class="dir-teamwrap blue">
+            <div class="dir-team blue">
+              <img class="dt-logo" alt="" aria-hidden="true" />
+              <div class="dt-info">
+                <div class="dt-name">蓝方</div>
+              </div>
+              <span class="dt-score">0</span>
+            </div>
+            <div class="dir-bans"></div>
+          </div>
+
+          <div class="dir-center-hub">
+            <div class="dir-timer">--</div>
+            <div class="dir-phase">等待开局</div>
+            <div class="dir-progress"><i></i></div>
+          </div>
+
+          <div class="dir-teamwrap red">
+            <div class="dir-team red">
+              <img class="dt-logo" alt="" aria-hidden="true" />
+              <div class="dt-info">
+                <div class="dt-name">红方</div>
+              </div>
+              <span class="dt-score">0</span>
+            </div>
+            <div class="dir-bans"></div>
+          </div>
+        </div>
+
+        <!-- 胜率预测（本系统算法） -->
+        <div class="dir-winrate">
+          <div class="dw-side blue">
+            <span class="dw-label">蓝方单局胜率</span>
+            <span class="dw-prob">--%</span>
+            <span class="dw-sub">—</span>
+          </div>
+          <div class="dw-mid">
+            <span class="dw-title">WIN PREDICTION</span>
+            <div class="dw-bar"><i class="b" style="width:50%"></i><i class="r" style="width:50%"></i></div>
+            <span class="dw-verdict">等待阵容成形</span>
+          </div>
+          <div class="dw-side red">
+            <span class="dw-label">红方单局胜率</span>
+            <span class="dw-prob">--%</span>
+            <span class="dw-sub">—</span>
+          </div>
+        </div>
+
+        <!-- 英雄池 -->
+        <div class="dir-pool">
+          <div class="dir-pool-bar">
+            <input class="dp-search" type="text" placeholder="搜索英雄…" autocomplete="off" />
+            <div class="dir-tabs">
+              <button data-pos="全部" class="active">全部</button>
+              <button data-pos="对抗路">对抗路</button>
+              <button data-pos="打野">打野</button>
+              <button data-pos="中路">中路</button>
+              <button data-pos="发育路">发育路</button>
+              <button data-pos="游走">游走</button>
+            </div>
+          </div>
+          <div class="dir-grid"></div>
+        </div>
+      </div>
+
+      <!-- 红方 pick 竖列 -->
+      <div class="dir-col red">
+        <div class="dir-col-label">RED PICK</div>
+        <div class="dir-picks"></div>
+      </div>
+    </div>
+
+    <!-- 板上的选人确认条（仅本机回合出现；联机导播恒不出现） -->
+    <div class="dir-confirm">
+      <span class="dc-hero"></span>
+      <button class="dir-btn" data-dir-ok>✓ 确认</button>
+      <button class="dir-btn ghost" data-dir-cancel>✕ 取消</button>
+    </div>
+
+    <!-- 音频控制：BP 音乐下拉 + 开关 + 音量 -->
+    <div class="dir-foot">
+      <div class="df-group">
+        <label class="df-label" for="dir-music">BP 音乐</label>
+        <select id="dir-music" title="选择 BP 背景音乐"></select>
+      </div>
+      <label class="dir-toggle" title="开启/关闭 BP 背景音乐">
+        <input type="checkbox" id="dir-music-on" />
+        <span class="dt-track"></span>
+        <span class="dt-text">音乐</span>
+      </label>
+      <span class="df-sep"></span>
+      <label class="dir-toggle" title="点击英雄时播放该英雄的台词/语音">
+        <input type="checkbox" id="dir-voice-on" checked />
+        <span class="dt-track"></span>
+        <span class="dt-text">英雄语音</span>
+      </label>
+      <span class="df-sep"></span>
+      <div class="df-group">
+        <label class="df-label" for="dir-volume">音量</label>
+        <input type="range" id="dir-volume" min="0" max="100" value="60" />
+      </div>
+      <span class="df-spacer"></span>
+      <button class="dir-btn ghost" data-dir-exit>✕ 退出导播</button>
+    </div>
+
+    <!-- 巅峰对决定格：双方**同位置**的英雄同时各弹一框，每路定格 2s 再走下一路。
+         五路走完不是切竖版，而是接"排列阵容顺序"那一层。
+         呈现与单机/联机的 #freeze-overlay 同一套结构（金色主题 + 粒子 + 海报），
+         区别只是这里是左右两张卡、并且循环 5 次。 -->
+    <div class="dir-freeze" id="dir-freeze" aria-hidden="true">
+      <div class="freeze-particles" id="dir-freeze-particles"></div>
+      <div class="dir-freeze-stage">
+        <div class="freeze-card dir-freeze-card" id="dir-freeze-blue">
+          <div class="freeze-type type-peak">巅峰对决 · 选用</div>
+          <div class="freeze-poster peak-gold">
+            <img class="freeze-img" alt="" />
+            <div class="freeze-fallback">⚔️</div>
+            <div class="freeze-poster-info">
+              <div class="freeze-hero-name">英雄</div>
+              <div class="freeze-hero-role">职业 · 分路</div>
+            </div>
+          </div>
+          <div class="freeze-team">蓝方</div>
+        </div>
+        <div class="dir-freeze-vs" aria-hidden="true">VS</div>
+        <div class="freeze-card dir-freeze-card" id="dir-freeze-red">
+          <div class="freeze-type type-peak">巅峰对决 · 选用</div>
+          <div class="freeze-poster peak-gold">
+            <img class="freeze-img" alt="" />
+            <div class="freeze-fallback">⚔️</div>
+            <div class="freeze-poster-info">
+              <div class="freeze-hero-name">英雄</div>
+              <div class="freeze-hero-role">职业 · 分路</div>
+            </div>
+          </div>
+          <div class="freeze-team">红方</div>
+        </div>
+      </div>
+      <div class="freeze-tip">第 <b class="dir-freeze-pos">1</b> / 5 路 · 双方同位置同时揭晓 · 点击跳到下一路</div>
+    </div>
+
+    <!-- 排列阵容顺序：**每一局** BP 走完之后的最后一步，不是自动切竖版
+         （巅峰局是先播完五路定格再进这里）。导播把双方的英雄拖成想要的顺序，
+         点"确认阵容"才切竖版阵容。顺序只影响呈现（js/director.js 的 lineupOrder），
+         不改 BP 的 picks 账。标题由 JS 按是不是巅峰局填。 -->
+    <div class="dir-order" id="dir-order" aria-hidden="true">
+      <div class="dir-order-panel">
+        <div class="dir-order-head">
+          <div class="dir-order-title">BP 完成 · 排列阵容顺序</div>
+          <div class="dir-order-hint">点两个英雄互换，或把一张拖到另一格上互换 · 从左到右就是竖版阵容里的排列</div>
+        </div>
+        <div class="dir-order-row" data-side="blue">
+          <div class="dir-order-side"><b data-order-team="blue">蓝方</b><span>蓝方阵容</span></div>
+          <div class="dir-order-track" id="dir-order-blue"></div>
+        </div>
+        <div class="dir-order-row" data-side="red">
+          <div class="dir-order-side"><b data-order-team="red">红方</b><span>红方阵容</span></div>
+          <div class="dir-order-track" id="dir-order-red"></div>
+        </div>
+        <div class="dir-order-foot">
+          <button class="dir-order-btn ghost" type="button" data-dir-order-reset>↺ 恢复原顺序</button>
+          <button class="dir-order-btn go" type="button" data-dir-order-ok>✓ 确认阵容</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/heroes.js"></script>
+  <script src="js/heroImages.js"></script>
+  <script src="js/official-roster.js"></script>
+  <script src="js/roster.js"></script>
+  <script src="js/draft-rules.js"></script>
+  <script src="js/data.js?v=20261002-finals-v5"></script>
+  <script src="js/visuals.js?v=20261002-finals-v5"></script>
+  <script src="js/audio.js?v=20261004-peakorder-v8"></script>
+  <script src="js/director.js?v=20261004-peakorder-v8"></script>
+  <script src="js/app.js?v=20261004-peakorder-v8"></script>
+  <script src="js/fx.js?v=20261002-finals-v5"></script>
+
+  <!-- ============ 全屏对局复盘界面 ============ -->
+  <div id="game-replay-screen">
+    <div class="gr-topbar">
+      <button class="gr-back" id="gr-back">← 返回复盘窗口</button>
+      <div class="gr-title" id="gr-title">对局复盘</div>
+      <div class="gr-tabs" id="gr-tabs"></div>
+    </div>
+    <div class="gr-body">
+      <!-- 左：BP 面板（复用 BP 界面布局） -->
+      <div class="gr-panel">
+        <div class="gr-panel-title">BP 回放</div>
+        <div class="gr-bp" id="gr-bp"></div>
+        <div class="gr-bp-analysis" id="gr-bp-analysis"></div>
+      </div>
+      <!-- 右：局内四阶段走势 -->
+      <div class="gr-panel">
+        <div class="gr-panel-title">局内胜率走势（模拟）</div>
+        <div id="gr-phase-chart"></div>
+        <div class="gr-phase-switch" id="gr-phase-switch">
+          <button data-mode="time" class="active">时间轴</button>
+          <button data-mode="bp">BP手数</button>
+        </div>
+        <div id="gr-phase-tips"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 大场复盘查看器（点击历史大场记录进入，与开局 BP 一致） ============ -->
+  <div id="series-viewer-screen">
+    <div class="gr-topbar">
+      <button class="gr-back" id="sv-back">← 返回记录</button>
+      <div class="gr-title" id="sv-title">大场复盘</div>
+      <div class="gr-tabs" id="sv-tabs"></div>
+    </div>
+    <div class="gr-body">
+      <div class="gr-panel">
+        <div class="gr-panel-title">BP 板（完整回放）</div>
+        <div class="sv-bp" id="sv-bp"></div>
+        <div class="gr-bp-analysis" id="sv-bp-analysis"></div>
+      </div>
+      <div class="gr-panel">
+        <div class="gr-panel-title">局内胜率走势（模拟）</div>
+        <div id="sv-phase-chart"></div>
+        <div class="gr-phase-switch" id="sv-phase-switch">
+          <button data-mode="time" class="active">时间轴</button>
+          <button data-mode="bp">BP手数</button>
+        </div>
+        <div id="sv-phase-tips"></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

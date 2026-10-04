@@ -1,0 +1,11 @@
+# 统一换行符：文本文件一律 LF（Cloudflare Pages 是 Linux 构建环境）
+* text=auto eol=lf
+
+# 二进制资源：不做任何换行转换
+*.mp3  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.woff binary
+*.woff2 binary

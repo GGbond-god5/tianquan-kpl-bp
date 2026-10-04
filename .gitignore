@@ -1,0 +1,27 @@
+# ---- 绝不入库：后端配置（含 DeepSeek 密钥）----
+ai.config.json
+*.config.local.json
+.env
+.env.*
+
+# ---- 绝不入库：运行期产物 ----
+*.log
+tunnel.log
+*.pid
+公网链接.txt
+funnel授权.txt
+
+# ---- 绝不入库：备份 / 抓取数据 ----
+_backup*/
+*.bak
+*.bak-*
+node_modules/
+crawler/*.sqlite
+
+# ---- 系统垃圾 ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 构建产物（Cloudflare Pages 会自己生成）----
+.wrangler/

@@ -1,0 +1,1195 @@
+/* ============================================================
+ * 导播模式 · 转播板子
+ *
+ * 布局参照 wucebp.top 的 BP 征召舞台（左/右各 5 个 pick 竖列、中央
+ * 比分与计时、ban 槽嵌在队卡内、底部英雄池），配色与字体沿用本系统
+ * 既定令牌（finals.css 的 --bg/--gold/--finals-gold + broadcast.css 的
+ * --blue/--red），因此观感与模拟系统一致，而非照搬参考站的青紫配色。
+ *
+ * 动效口径参照参考站（lockedImpact / coolSweep / banDiagonalReveal）：
+ *   选中确定 = 缩放冲击 + 立绘推入 + 扫光
+ *   禁用确定 = 对角 clip-path 揭示
+ *   未确定   = 蓝/红呼吸边框
+ *
+ * ⚠️ 与 broadcast.css / finals.css 同样的坑：本文件里凡是 @keyframes 要动
+ *    的属性（transform / box-shadow / clip-path / opacity），基础规则中
+ *    一律不能写 !important —— 否则动画静默失效（Cascade 4 中 important
+ *    作者声明排在 animation 之上）。
+ * ============================================================ */
+
+#director-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 18px 14px;
+  box-sizing: border-box;
+  color: var(--text, #eef3fa);
+  background:
+    radial-gradient(1200px 620px at 50% -10%, rgba(222, 197, 141, 0.10), transparent 62%),
+    radial-gradient(900px 520px at 50% 108%, rgba(96, 181, 255, 0.07), transparent 60%),
+    #030714;
+  overflow: hidden;
+}
+#director-screen.active { display: flex; }
+body.dir-open { overflow: hidden; }
+
+/* 暖色光带：参考站锁定瞬间自下而上扫过的一道横向亮条 */
+#director-screen::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 229, 138, 0.55), transparent);
+  pointer-events: none;
+}
+
+/* -------------------- 顶栏 -------------------- */
+.dir-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+  min-height: 46px;
+  padding: 0 4px;
+}
+.dir-head .dh-event {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--finals-gold, #ffe58a);
+  white-space: nowrap;
+}
+.dir-head .dh-game {
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  color: var(--muted, #94a4ba);
+  white-space: nowrap;
+}
+.dir-head .dh-spacer { flex: 1; }
+.dir-head .dh-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid rgba(222, 197, 141, 0.32);
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--gold, #dec58d);
+  background: rgba(222, 197, 141, 0.06);
+  white-space: nowrap;
+}
+.dir-head .dh-chip.live::before {
+  content: "";
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #ff7487;
+  box-shadow: 0 0 8px #ff7487;
+  animation: dirLiveDot 1.6s ease-in-out infinite;
+}
+@keyframes dirLiveDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.28; } }
+
+.dir-btn {
+  padding: 7px 16px;
+  border-radius: 9px;
+  border: 1px solid rgba(222, 197, 141, 0.4);
+  background: linear-gradient(180deg, rgba(222, 197, 141, 0.16), rgba(222, 197, 141, 0.05));
+  color: var(--finals-gold, #ffe58a);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, transform 0.18s;
+}
+.dir-btn:hover { background: rgba(222, 197, 141, 0.24); border-color: rgba(255, 229, 138, 0.7); }
+.dir-btn:active { transform: scale(0.97); }
+.dir-btn.ghost { background: transparent; color: var(--muted, #94a4ba); border-color: rgba(148, 164, 186, 0.32); }
+.dir-btn.ghost:hover { color: var(--text, #eef3fa); border-color: rgba(148, 164, 186, 0.6); }
+
+/* -------------------- 主舞台 -------------------- */
+.dir-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  /* 侧列宽度跟着**板面高度**走（不是宽度）：槽位高度是"列高 ÷ 5.7"，
+   * 列宽必须按同一把尺子缩放，格子才不会在某些分辨率下变成长条。
+   * 宽度 ≈ 槽高的 1.2 倍 —— 这样 1:1 的立绘按 contain 铺进来时，
+   * 左右剩下的特效板子只有一条窄边，观感上仍然是"图填满框"。 */
+  grid-template-columns:
+    clamp(140px, calc((100vh - 180px) * 0.21), 260px)
+    minmax(0, 1fr)
+    clamp(140px, calc((100vh - 180px) * 0.21), 260px);
+  gap: clamp(8px, 0.9vw, 16px);
+}
+
+/* 左右 pick 竖列 */
+.dir-col {
+  display: flex;
+  flex-direction: column;
+  /* 槽位尺寸的两把尺子（见下方"强调格"一节）：
+   *   --slot-s 常态格高 = 列高 ÷ 5.7
+   *   --slot-b 放大格高 = 常态 × 1.35
+   * 为什么是 5.7 而不是 5：一列 5 格全选中时不能有富余，而"某一手放大"最大
+   * 要吃掉 3×常态 + 2×放大 = 3S + 2×1.35S = 5.7S（蓝方第 3、4 手同组时），
+   * 分母取 5.7 正好让这个最坏情况刚好塞满，一列永远不溢出、也不留死空。 */
+  --col-gap: clamp(6px, 0.8vh, 11px);
+  --slot-s: calc((100% - 4 * var(--col-gap)) / 5.7);
+  --slot-b: calc(var(--slot-s) * 1.35);
+  gap: var(--col-gap);
+  min-height: 0;
+}
+.dir-col-label {
+  flex: 0 0 auto;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--muted, #94a4ba);
+  text-transform: uppercase;
+}
+/* space-between 只在"有富余"时生效：空槽是 flex:1，会把富余吃干净，
+ * 所以它实际只在最后一个待选格（后面没有空槽可压）时把富余摊进格间距，
+ * 免得列底留一块死空。 */
+.dir-col .dir-picks { display: flex; flex-direction: column; gap: var(--col-gap); justify-content: space-between; flex: 1 1 auto; min-height: 0; }
+
+/* 中央区 */
+.dir-mid {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1vh, 14px);
+  min-height: 0;
+}
+
+/* -------------------- 比分 / 计时 -------------------- */
+.dir-top {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(150px, 0.72fr) minmax(190px, 1fr);
+  align-items: stretch;
+  gap: clamp(8px, 0.8vw, 16px);
+  padding: clamp(8px, 1.1vh, 14px) clamp(10px, 1vw, 18px);
+  border: 1px solid rgba(222, 197, 141, 0.18);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(16, 28, 45, 0.86), rgba(6, 12, 24, 0.9));
+  backdrop-filter: blur(10px);
+  position: relative;
+  overflow: hidden;
+}
+/* 顶栏扫光：参考站 headerScan 的克制版本，只在切换局数时脉冲一次 */
+.dir-top::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 28%;
+  left: -30%;
+  background: linear-gradient(90deg, transparent, rgba(255, 229, 138, 0.13), transparent);
+  pointer-events: none;
+}
+.dir-top.scanned::after { animation: dirHeaderScan 0.9s ease-out 1; }
+@keyframes dirHeaderScan { from { left: -30%; } to { left: 125%; } }
+
+.dir-team {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.dir-team.red { flex-direction: row-reverse; }
+.dir-team .dt-logo {
+  width: 42px; height: 42px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+}
+.dir-team .dt-info { min-width: 0; }
+.dir-team .dt-name {
+  font-size: clamp(14px, 1.5vw, 19px);
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dir-team.blue .dt-name { color: var(--blue, #60b5ff); }
+.dir-team.red .dt-name { color: var(--red, #ff7487); }
+.dir-team .dt-score {
+  font-size: clamp(24px, 3vw, 38px);
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.dir-team.blue .dt-score { color: var(--blue, #60b5ff); }
+.dir-team.red .dt-score { color: var(--red, #ff7487); }
+.dir-team.red .dt-info { text-align: right; }
+
+/* ban 槽嵌在队卡下方（与参考站一致） */
+.dir-bans {
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+  justify-content: flex-start;
+}
+.dir-teamwrap.red .dir-bans { justify-content: flex-end; }
+
+.dir-center-hub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  text-align: center;
+}
+.dir-timer {
+  font-size: clamp(26px, 3.4vw, 42px);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--text, #eef3fa);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+.dir-timer.warning { color: #ff7487; animation: dirTimerPulse 1s ease-in-out infinite; }
+@keyframes dirTimerPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.dir-phase {
+  font-size: clamp(10px, 1.05vw, 13px);
+  letter-spacing: 2.5px;
+  color: var(--muted, #94a4ba);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.dir-progress {
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(148, 164, 186, 0.2);
+  overflow: hidden;
+}
+.dir-progress > i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--blue, #60b5ff), var(--gold, #dec58d));
+  transition: transform 0.3s linear;
+}
+
+/* -------------------- 胜率预测 -------------------- */
+.dir-winrate {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: clamp(8px, 1vw, 18px);
+  padding: clamp(8px, 1vh, 13px) clamp(12px, 1.2vw, 22px);
+  border: 1px solid rgba(222, 197, 141, 0.22);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(16, 28, 45, 0.8), rgba(6, 12, 24, 0.86));
+}
+.dw-side { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.dw-side.red { align-items: flex-end; }
+.dw-label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted, #94a4ba);
+  text-transform: uppercase;
+}
+.dw-prob {
+  font-size: clamp(22px, 2.9vw, 40px);
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.3s;
+}
+.dw-side.blue .dw-prob { color: var(--blue, #60b5ff); }
+.dw-side.red .dw-prob { color: var(--red, #ff7487); }
+.dw-sub { font-size: 11px; color: var(--muted, #94a4ba); font-variant-numeric: tabular-nums; }
+.dw-mid { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: clamp(120px, 12vw, 190px); }
+.dw-title { font-size: 10px; letter-spacing: 2.5px; color: var(--gold, #dec58d); text-transform: uppercase; }
+.dw-bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  background: rgba(148, 164, 186, 0.16);
+}
+.dw-bar > i { display: block; height: 100%; transition: width 0.45s cubic-bezier(0.22, 0.78, 0.24, 1); }
+.dw-bar > i.b { background: linear-gradient(90deg, #1d4ed8, var(--blue, #60b5ff)); }
+.dw-bar > i.r { background: linear-gradient(90deg, var(--red, #ff7487), #b91c1c); }
+.dw-verdict { font-size: 11px; color: var(--muted, #94a4ba); text-align: center; min-height: 14px; }
+
+/* -------------------- 英雄池 -------------------- */
+.dir-pool {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: clamp(8px, 1vh, 12px);
+  border: 1px solid rgba(222, 197, 141, 0.16);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(12, 20, 36, 0.82), rgba(4, 9, 19, 0.9));
+  overflow: hidden;
+}
+.dir-pool-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 0 0 auto; }
+.dir-pool-bar .dp-search {
+  flex: 1 1 130px;
+  min-width: 110px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 164, 186, 0.28);
+  background: rgba(6, 12, 24, 0.7);
+  color: var(--text, #eef3fa);
+  font-size: 12px;
+}
+.dir-pool-bar .dp-search::placeholder { color: rgba(148, 164, 186, 0.7); }
+.dir-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.dir-tabs button {
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 164, 186, 0.25);
+  background: transparent;
+  color: var(--muted, #94a4ba);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.dir-tabs button:hover { color: var(--text, #eef3fa); border-color: rgba(222, 197, 141, 0.5); }
+.dir-tabs button.active {
+  color: #0a0e1a;
+  background: var(--gold, #dec58d);
+  border-color: var(--gold, #dec58d);
+  font-weight: 700;
+}
+.dir-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  /* 格子要够大（用户口径：一屏放不下就上下滑动，不许把图压小）。
+   * 135 个英雄按 15～19 列排，9 行左右，溢出交给 .dir-grid 的 overflow-y。 */
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
+  align-content: start;
+  /* 🔑 不写这行就会"图标相互重叠"（实测：行距 58.89px 而格子高 62.77px，
+   * 每行压住下一行 3.88px）。原因是 auto 行高在测量时把 aspect-ratio
+   * 的换算是循环依赖，Chrome 量出来偏小；把行高钉成 min-content 后
+   * 行距 = 62.77 + 8 gap，重叠归零。改回 auto 会复发。 */
+  grid-auto-rows: min-content;
+  padding: 2px 6px 4px 2px;
+  /* 池子放不下就滚动（用户口径），滚动条做成板面同色的细条，别用系统亮色 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 164, 186, 0.32) transparent;
+}
+.dir-grid::-webkit-scrollbar { width: 8px; }
+.dir-grid::-webkit-scrollbar-track { background: transparent; }
+.dir-grid::-webkit-scrollbar-thumb {
+  background: rgba(148, 164, 186, 0.28);
+  border-radius: 4px;
+}
+.dir-grid::-webkit-scrollbar-thumb:hover { background: rgba(148, 164, 186, 0.5); }
+.dir-grid .dir-hero { cursor: pointer; }
+.dir-grid.turn-locked .dir-hero { cursor: not-allowed; }
+
+/* 英雄池卡片（导播板专用，不复用主界面 .hero-card 的尺寸假设）
+ *
+ * 玻璃质感：格子的"玻璃"由三层叠出来 ——
+ *   ① 底板：半透明深蓝渐变（透出面板底色）
+ *   ② 内高光：inset 0 1px 0 的顶边亮线 + 一圈极淡的内描边（玻璃厚度）
+ *   ③ ::before 斜向高光带（screen 混合），像玻璃反光一样压在图上面
+ * backdrop-filter 让背后面板的暖色光晕透上来，这是"玻璃"而不是"塑料"的关键。
+ *
+ * 不重叠：格子本身是 grid 项，尺寸由 minmax(min, 1fr) 钉死；再加
+ * min-width/min-height:0 防止长名字把格子撑破。hover 的放大走 z-index
+ * 抬升（浮到邻格之上），而不是靠负 margin 去挤压布局。 */
+.dir-hero {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 164, 186, 0.26);
+  background:
+    linear-gradient(180deg, rgba(20, 34, 54, 0.62), rgba(6, 12, 24, 0.78));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    inset 0 -10px 18px rgba(3, 7, 20, 0.55),
+    0 2px 8px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(6px) saturate(1.15);
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform 0.16s cubic-bezier(0.22, 0.78, 0.24, 1), border-color 0.18s, box-shadow 0.18s;
+}
+/* 玻璃反光：斜向高光带盖在头像之上（z-index 2），让每格都有同一角度的反光 */
+.dir-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(152deg, rgba(255, 255, 255, 0.17) 0%, rgba(255, 255, 255, 0.05) 20%, transparent 44%);
+  mix-blend-mode: screen;
+}
+.dir-hero:hover {
+  transform: translateY(-3px) scale(1.03);
+  z-index: 3;
+  border-color: rgba(255, 229, 138, 0.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 8px 20px rgba(0, 0, 0, 0.55),
+    0 0 18px rgba(255, 229, 138, 0.18);
+}
+.dir-hero .dh-avatar { position: absolute; inset: 0; z-index: 1; }
+.dir-hero .dh-avatar img { width: 100%; height: 100%; object-fit: cover; object-position: center 20%; }
+/* 载入中的空窗：给块极淡的斜纹，避免格子看起来像坏了 */
+.dir-hero .dh-avatar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(135deg, rgba(148, 164, 186, 0.09) 0 6px, rgba(148, 164, 186, 0.02) 6px 12px);
+  transition: opacity 0.22s ease;
+}
+.dir-hero .dh-avatar.hero-image-ready::before { opacity: 0; }
+
+/* 分路图标：仅当头像没能显示时出现（用户口径）。
+ * heroImgTag 成功时给 .dh-avatar 挂 hero-image-ready，失败挂 hero-image-failed；
+ * 两个都不在 = 还在加载，同样不显示图标，免得闪一下又消失。 */
+.dir-hero .dh-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.dir-hero .dh-avatar.hero-image-failed .dh-fallback { opacity: 0.55; }
+
+.dir-hero .dh-name {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  z-index: 3;
+  padding: 2px 4px;
+  font-size: 10px;
+  text-align: center;
+  color: var(--text, #eef3fa);
+  background: linear-gradient(0deg, rgba(3, 7, 20, 0.94), transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dir-hero.selected {
+  border-color: var(--finals-gold, #ffe58a);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 0 2px rgba(255, 229, 138, 0.5),
+    0 0 18px rgba(255, 229, 138, 0.3);
+}
+.dir-hero.locked, .dir-hero.banned { filter: grayscale(1) brightness(0.42); }
+.dir-hero.picked { filter: grayscale(0.85) brightness(0.55); }
+.dir-hero.banned::after {
+  content: "";
+  position: absolute;
+  z-index: 4;
+  left: -12%; top: 50%;
+  width: 124%; height: 2px;
+  background: linear-gradient(90deg, transparent, #ff7487, transparent);
+  transform: rotate(-34deg);
+}
+/* 不可选项仍保留 title 悬停说明，禁用逻辑交给 JS 判定，不用 pointer-events
+   （否则连悬停提示都没了） */
+.dir-hero.locked, .dir-hero.banned, .dir-hero.picked { cursor: not-allowed; }
+
+/* -------------------- 槽位 -------------------- */
+/* 尺寸随视口伸缩，保证一屏内 5 个 pick 竖排完整可见。
+ * 质感与英雄池同源（半透明渐变 + 内高光 + backdrop-filter + 斜向反光），
+ * 只是更厚一档：2px 边框、更大的圆角，因为它在板子上是主角。 */
+.dir-pick {
+  /* 空槽（组外）分剩余空间；已确定格与放大格在下面各自钉死尺寸 */
+  flex: 1 1 0;
+  min-height: 0;
+  --name-h: 21px;   /* 名字条高度：立绘按这个下边距让位，名字不压脸 */
+  position: relative;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.13);
+  /* 特效板子：立绘按 contain 铺进来时，铺不满的地方就是这层在垫。
+   * 四层叠加 —— 中央光台（把立绘托起来）、两组斜向细网格（科技板子的骨架）、
+   * 四角压暗（把视线收到中间）、底部玻璃衬底（空槽时也不至于透明）。 */
+  background-color: rgba(8, 15, 28, 0.72);
+  background-image:
+    radial-gradient(118% 64% at 50% 44%, rgba(96, 181, 255, 0.16), transparent 62%),
+    repeating-linear-gradient(58deg, rgba(148, 164, 186, 0.075) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(-58deg, rgba(148, 164, 186, 0.05) 0 1px, transparent 1px 11px),
+    radial-gradient(140% 118% at 50% 50%, transparent 42%, rgba(3, 7, 20, 0.55) 100%),
+    linear-gradient(180deg, rgba(20, 34, 54, 0.62), rgba(6, 12, 24, 0.8));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+    inset 0 -16px 26px rgba(3, 7, 20, 0.55),
+    0 2px 10px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(6px) saturate(1.12);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  isolation: isolate;
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+/* 玻璃反光（与 .dir-hero::before 同角度，板面观感统一） */
+.dir-pick::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(152deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 20%, transparent 44%);
+  mix-blend-mode: screen;
+}
+
+/* 分路图标：只在头像没能显示时出现（与英雄池同一口径）。
+ * heroImgTag 成功 → 父元素挂 hero-image-ready；失败 → hero-image-failed；
+ * 两者都没有 = 还在加载，同样不显示，避免"闪一下图标再换成头像"。 */
+.dir-pick .slot-fallback,
+.dir-ban .slot-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.dir-pick.hero-image-failed .slot-fallback,
+.dir-ban.hero-image-failed .slot-fallback { opacity: 0.5; }
+
+/* Preserve the complete foreground image; a softened copy fills spare edges. */
+.dir-pick .slot-img {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  object-fit: contain;
+  object-position: center;
+}
+.dir-pick .dir-slot-name {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: var(--name-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+  padding: 0 5px;
+  font-size: 11px;
+  line-height: 1;
+  text-align: center;
+  color: var(--text, #eef3fa);
+  background: linear-gradient(0deg, rgba(3, 7, 20, 0.94), rgba(3, 7, 20, 0.5));
+  border-top: 1px solid rgba(148, 164, 186, 0.12);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dir-pick.blue-side { border-color: rgba(96, 181, 255, 0.42); }
+.dir-pick.red-side { border-color: rgba(255, 116, 135, 0.42); }
+
+/* 空槽占位符：组外空槽是 "?"，本组还没轮到的格子显示手数（提示"这一手也是你的"） */
+.dir-slot-empty {
+  font-size: 20px;
+  color: rgba(148, 164, 186, 0.4);
+  letter-spacing: 1px;
+}
+.dir-pick.live .dir-slot-empty,
+.dir-pick.pending .dir-slot-empty {
+  font-size: 17px;
+  font-weight: 700;
+  color: rgba(255, 229, 138, 0.5);
+}
+
+/* ban 槽（小方块） */
+.dir-ban {
+  position: relative;
+  width: clamp(34px, 3.1vw, 46px);
+  height: clamp(34px, 3.1vw, 46px);
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(180deg, rgba(16, 28, 45, 0.7), rgba(6, 12, 24, 0.8));
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.dir-ban .slot-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.dir-ban.filled .slot-img { filter: grayscale(1) brightness(0.55); }
+/* 禁用斜线：参考站 ban 的对角划掉 */
+.dir-ban .dir-ban-strike {
+  position: absolute;
+  left: -12%;
+  top: 50%;
+  width: 124%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #ff7487, transparent);
+  transform: rotate(-34deg);
+  opacity: 0;
+}
+.dir-ban.filled .dir-ban-strike { opacity: 0.9; }
+.dir-ban .dir-ban-name {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  font-size: 8px;
+  text-align: center;
+  color: rgba(238, 243, 250, 0.82);
+  background: rgba(3, 7, 20, 0.72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* -------------------- 未确定：呼吸边框 --------------------
+ * 只动 box-shadow，不动 border-color —— 与 broadcast.css 的
+ * pendingFrameBlink 同一口径，避免与 !important 规则打架。
+ * .live 是"本组还没轮到的那几格"：同样闪，但尺寸不变（先闪后大，见下）。 */
+.dir-pick.pending.blue-side, .dir-pick.live.blue-side, .dir-ban.pending.blue-side { animation: dirPendingBlue 1.45s ease-in-out infinite; }
+.dir-pick.pending.red-side,  .dir-pick.live.red-side,  .dir-ban.pending.red-side  { animation: dirPendingRed 1.45s ease-in-out infinite; }
+
+/* ---------------- 强调格：按 BP 规则分组，尺寸钉死 ----------------
+ *
+ * 口径（2026-10-03 用户定稿）：
+ *   · 强调是按 **BP 规则里的"同方连选组"** 走的，不是单格走。第一轮是
+ *     蓝1 → 红2 → 蓝2 → 红1，所以"蓝方选 1 个强调 1 格，红方要选 2 个就先
+ *     把那两格一起闪，英雄到位的那格再放大，两格都确定完再一起复位"。
+ *   · 放大分两步：**先把本组要选的那几格一起闪起来（尺寸不变），英雄真的落
+ *     进待选位（.preview）那一瞬才撑开**；组内全定完再一起缩回。
+ *   · **前面已选定的框尺寸不变**，后面的空槽被压缩让位，待选格放大。
+ *   · 放大尺寸与它在第几格无关 —— 最后一格待选和第一格待选一样大。
+ *
+ * 这三条一起，唯一自洽的解是"钉死尺寸 + 空槽吸收"：
+ *   .filled（已确定，非本组）  flex-basis = S      —— 全程纹丝不动
+ *   .hold  （本组已确定）      flex-basis = 1.35S  —— 保持放大，等同组另一手
+ *   .pending.preview（英雄已落格）flex-basis = 1.35S —— 与 hold 同尺寸、与位置无关
+ *   .pending / .live（光闪）   flex: 1 1 0         —— 常态尺寸，闪框提示
+ *   空槽                       flex: 1 1 0         —— 富余归它们，待选一大就压扁
+ * 放大格的总预算由 S 的分母 5.7 保证（见 .dir-col 注释），所以任何一格在任何
+ * 位置放大都不会挤爆列，也不需要按位置调比例。
+ *
+ * 为什么不用 flex-grow 那一套（旧实现）：flex-grow 是"按份额分"，待选格在第 0
+ * 格和第 4 格拿到的高度完全不同，且会连已确定的框一起改写尺寸 —— 正是用户
+ * 点名的两个毛病。
+ *
+ * ⚠️ 元素每帧都是 innerHTML 重建的，新元素不触发 transition，所以"进场放大 /
+ *    退场缩小"只能写成 animation，并且**只在角色真的变了的那一帧挂**
+ *    （director.js 用 lastRoles 逐格比对）。
+ * ⚠️ 两条曲线必须同缓动同时长、互为镜像，交接那一帧同列其他格才不会被抖一下。
+ * ⚠️ 退场动画只会落在 filled 格上（放大格 → 确定后仍是 filled），所以
+ *    animation-fill-mode: both 把 flex-basis 停在 S 上不会跟"空槽要弹性"打架。 */
+.dir-pick.filled { flex: 0 0 var(--slot-s); }
+.dir-pick.hold,
+.dir-pick.pending.preview { flex: 0 0 var(--slot-b); }
+.dir-pick.live { flex: 1 1 0; }
+/* 一整列选满时没有空槽可让位，让五格平分列高（否则列底会留下 12% 的死空） */
+.dir-picks.all-filled .dir-pick { flex: 1 1 0; }
+
+.dir-pick.pending.blue-side.turn-enter { animation: dirPendingBlue 1.45s ease-in-out infinite, dirSlotGrow 0.42s cubic-bezier(0.22, 0.78, 0.24, 1) both; }
+.dir-pick.pending.red-side.turn-enter  { animation: dirPendingRed 1.45s ease-in-out infinite, dirSlotGrow 0.42s cubic-bezier(0.22, 0.78, 0.24, 1) both; }
+.dir-pick.turn-leave { animation: dirSlotShrink 0.42s cubic-bezier(0.22, 0.78, 0.24, 1) both; }
+@keyframes dirSlotGrow   { from { flex-basis: var(--slot-s); } to { flex-basis: var(--slot-b); } }
+@keyframes dirSlotShrink { from { flex-basis: var(--slot-b); } to { flex-basis: var(--slot-s); } }
+
+/* 待确认英雄飞入框内。
+ *
+ * 🔑 为什么以前"没体现出来"：板面的头像是 data-src 懒加载的，挂 .fly-in 的那
+ *    一帧 <img> 还没有 src，动画在**空元素**上从头播到尾（0.46s），等图真正
+ *    load 出来时动画早就停了（both 把它定在末帧），肉眼只剩一张静止的图。
+ *    修法：动画挂在 hero-image-ready 上 —— 那是 heroImgTag 的 onload 回调给
+ *    父元素挂的类，图落地的瞬间才开始飞，看得见。
+ *
+ * 位移用 translateY（从上方落下）+ 缩放收束 + 模糊渐清，三段都动，够显眼。 */
+.dir-pick.preview.fly-in.hero-image-ready .slot-img {
+  animation: dirIconFlyIn 0.56s cubic-bezier(0.16, 0.84, 0.22, 1.02) both;
+}
+/* 框本身同时来一下"接住"的冲击：与呼吸动画并存，所以两条都得列上 */
+.dir-pick.pending.preview.blue-side.fly-in.hero-image-ready {
+  animation: dirPendingBlue 1.45s ease-in-out infinite, dirLandThump 0.56s cubic-bezier(0.16, 0.84, 0.22, 1.02) both;
+}
+.dir-pick.pending.preview.red-side.fly-in.hero-image-ready {
+  animation: dirPendingRed 1.45s ease-in-out infinite, dirLandThump 0.56s cubic-bezier(0.16, 0.84, 0.22, 1.02) both;
+}
+@keyframes dirIconFlyIn {
+  0%   { transform: translateY(-52%) scale(1.6); opacity: 0; filter: brightness(2.1) blur(7px); }
+  34%  { opacity: 1; }
+  66%  { transform: translateY(5%) scale(1.05); filter: brightness(1.4) blur(0); }
+  100% { transform: translateY(0) scale(1); opacity: 0.85; filter: brightness(1) blur(0); }
+}
+@keyframes dirLandThump {
+  0%   { transform: scale(1); }
+  58%  { transform: scale(1.035); box-shadow: 0 0 34px rgba(255, 229, 138, 0.55); }
+  100% { transform: scale(1); box-shadow: 0 0 16px rgba(255, 229, 138, 0.2); }
+}
+@keyframes dirPendingBlue {
+  0%, 100% { box-shadow: inset 0 0 14px rgba(96, 181, 255, 0.15), 0 0 10px rgba(96, 181, 255, 0.14); }
+  50%      { box-shadow: inset 0 0 20px rgba(96, 181, 255, 0.34), 0 0 20px rgba(96, 181, 255, 0.34); }
+}
+@keyframes dirPendingRed {
+  0%, 100% { box-shadow: inset 0 0 14px rgba(255, 116, 135, 0.15), 0 0 10px rgba(255, 116, 135, 0.14); }
+  50%      { box-shadow: inset 0 0 20px rgba(255, 116, 135, 0.34), 0 0 20px rgba(255, 116, 135, 0.34); }
+}
+
+/* 预选（待确认）：头像略暗 + 金色描边呼吸 */
+.dir-pick.preview, .dir-ban.preview { border-color: rgba(255, 229, 138, 0.75); }
+.dir-pick.preview .slot-img, .dir-ban.preview .slot-img { opacity: 0.85; }
+
+/* -------------------- 确定动效 -------------------- */
+/* pick 确定：缩放冲击 + 立绘推入 + 浮光扫过。
+ * ⚠️ 这里**不带** dirSlotShrink：同组还有下一手时这一格要保持放大（.hold），
+ *    缩回是整组走完时 .turn-leave 的事 —— 也就是用户要的"两个都确定完了之后
+ *    再同时恢复"。 */
+.dir-pick.just-confirmed {
+  animation: dirLockImpact 0.65s cubic-bezier(0.2, 0.75, 0.2, 1) both;
+}
+/* 组内最后一格确定 = 这一手既"定格"又"整组一起缩回"，两条动画同一个元素都要跑。
+ * 不写这条的话 .just-confirmed 会把 .turn-leave 整个顶掉（同为 2 个类，后写的赢），
+ * 那一格就会从放大尺寸**跳变**回常态 —— 用户要的是"两个同时恢复"。 */
+.dir-pick.just-confirmed.turn-leave {
+  animation: dirLockImpact 0.65s cubic-bezier(0.2, 0.75, 0.2, 1) both,
+             dirSlotShrink 0.42s cubic-bezier(0.22, 0.78, 0.24, 1) both;
+}
+@keyframes dirLockImpact {
+  0%   { transform: scale(1); }
+  26%  { transform: scale(1.04); box-shadow: 0 0 30px rgba(255, 229, 138, 0.5); }
+  62%  { transform: scale(0.985); }
+  100% { transform: scale(1); box-shadow: 0 0 14px rgba(255, 229, 138, 0.22); }
+}
+.dir-pick.just-confirmed .slot-img { animation: dirPortraitIn 0.65s cubic-bezier(0.2, 0.75, 0.2, 1) both; }
+@keyframes dirPortraitIn {
+  0%   { transform: scale(1.08); filter: brightness(1.25) saturate(1.15); }
+  62%  { transform: scale(0.985); filter: brightness(1); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+/* 立绘表面的浮光 + 粒子：::after 横掠。
+ * 立绘是铺满整格的（width/height 100%），所以这层"盖在 ::after 上的光"
+ * 落点就是立绘表面本身 —— "英雄图标表面有一层浮光扫过"。
+ *
+ * 四层背景叠在同一个 ::after 上：第一层是斜向浮光（窄芯、软边，像玻璃反光
+ * 从立绘表面划过），后三层是错开的点阵（三组不同间距/尺寸的 radial-gradient），
+ * 于是光带扫过的同时带着一层光尘。共用一条 dirSweep：transform 横扫、
+ * opacity 起落 —— 不另开 keyframe 就不会有属性打架。 */
+.dir-pick.just-confirmed::after {
+  content: "";
+  position: absolute;
+  inset: -15% -55%;
+  z-index: 5;
+  pointer-events: none;
+  background-image:
+    linear-gradient(102deg,
+      transparent 34%,
+      rgba(255, 250, 232, 0.16) 42%,
+      rgba(255, 250, 232, 0.85) 50%,
+      rgba(255, 250, 232, 0.16) 58%,
+      transparent 66%),
+    radial-gradient(circle, rgba(255, 246, 214, 0.95) 0 1.4px, transparent 2px),
+    radial-gradient(circle, rgba(255, 229, 138, 0.85) 0 1px, transparent 1.6px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.9) 0 1.1px, transparent 1.7px);
+  background-size: 100% 100%, 34px 30px, 24px 21px, 48px 42px;
+  background-position: 0 0, 0 0, 11px 7px, 4px 19px;
+  background-repeat: no-repeat, repeat, repeat, repeat;
+  animation: dirSweep 0.78s cubic-bezier(0.3, 0.7, 0.3, 1) both;
+}
+@keyframes dirSweep {
+  from { transform: translateX(-110%) skewX(-16deg); opacity: 0; }
+  26%  { opacity: 1; }
+  72%  { opacity: 0.9; }
+  to   { transform: translateX(112%) skewX(-16deg); opacity: 0; }
+}
+.dir-pick.filled.stable { box-shadow: inset 0 0 18px rgba(222, 197, 141, 0.10); }
+/* 组内已确定但还没复位的那一格：比常态多一点金边，说明"这手还在本组里" */
+.dir-pick.hold { box-shadow: inset 0 0 20px rgba(222, 197, 141, 0.16), 0 0 14px rgba(255, 229, 138, 0.16); }
+
+/* ban 确定：对角揭示（参考站 banDiagonalReveal） */
+.dir-ban.just-confirmed .slot-img { animation: dirBanReveal 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes dirBanReveal {
+  from { clip-path: inset(0 100% 100% 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+.dir-ban.just-confirmed .dir-ban-strike { animation: dirBanStrikeIn 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes dirBanStrikeIn {
+  from { opacity: 0; transform: rotate(-34deg) scaleX(0); }
+  to   { opacity: 0.9; transform: rotate(-34deg) scaleX(1); }
+}
+
+/* -------------------- 底栏 / 音频控件 -------------------- */
+.dir-foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px clamp(10px, 1vw, 16px);
+  border: 1px solid rgba(222, 197, 141, 0.18);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(16, 28, 45, 0.8), rgba(6, 12, 24, 0.88));
+}
+.dir-foot .df-group { display: flex; align-items: center; gap: 7px; }
+.dir-foot label.df-label { font-size: 11px; letter-spacing: 1px; color: var(--muted, #94a4ba); white-space: nowrap; }
+.dir-foot select,
+.dir-foot input[type="range"] {
+  height: 28px;
+  border-radius: 7px;
+  border: 1px solid rgba(148, 164, 186, 0.3);
+  background: rgba(6, 12, 24, 0.75);
+  color: var(--text, #eef3fa);
+  font-size: 12px;
+  padding: 0 8px;
+  max-width: 260px;
+}
+.dir-foot select { cursor: pointer; }
+.dir-foot input[type="range"] { padding: 0; width: clamp(90px, 9vw, 140px); accent-color: var(--gold, #dec58d); }
+.dir-foot .df-sep { width: 1px; height: 22px; background: rgba(148, 164, 186, 0.22); }
+.dir-foot .df-spacer { flex: 1; }
+
+/* 开关（音乐 / 语音） */
+.dir-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  color: var(--muted, #94a4ba);
+}
+.dir-toggle .dt-track {
+  position: relative;
+  width: 36px;
+  height: 19px;
+  border-radius: 999px;
+  background: rgba(148, 164, 186, 0.3);
+  transition: background 0.2s;
+  flex: 0 0 auto;
+}
+.dir-toggle .dt-track::after {
+  content: "";
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  background: #eef3fa;
+  transition: transform 0.2s;
+}
+.dir-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.dir-toggle input:checked + .dt-track { background: var(--gold, #dec58d); }
+.dir-toggle input:checked + .dt-track::after { transform: translateX(17px); background: #0a0e1a; }
+.dir-toggle input:checked ~ .dt-text { color: var(--finals-gold, #ffe58a); }
+
+/* -------------------- 导播板上的选人确认条 -------------------- */
+.dir-confirm {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(12px, 3vh, 34px);
+  transform: translateX(-50%);
+  z-index: 5;
+  display: none;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 229, 138, 0.5);
+  background: rgba(6, 12, 24, 0.94);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+.dir-confirm.show { display: flex; }
+.dir-confirm .dc-hero { font-size: 14px; font-weight: 700; color: var(--finals-gold, #ffe58a); }
+
+/* -------------------- 窄屏退化 -------------------- */
+@media (max-width: 1100px) {
+  .dir-body {
+    grid-template-columns:
+      clamp(100px, calc((100vh - 180px) * 0.2), 150px)
+      minmax(0, 1fr)
+      clamp(100px, calc((100vh - 180px) * 0.2), 150px);
+  }
+  .dir-pick { --name-h: 17px; }
+  .dir-top { grid-template-columns: 1fr auto 1fr; }
+  .dir-team .dt-logo { width: 32px; height: 32px; }
+}
+@media (max-width: 820px) {
+  #director-screen { padding: 8px 10px; gap: 7px; }
+  .dir-body { grid-template-columns: 1fr 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .dir-mid { grid-column: 1 / -1; grid-row: 1; }
+  .dir-col.blue { grid-column: 1; grid-row: 2; }
+  .dir-col.red  { grid-column: 2; grid-row: 2; }
+  .dir-pool { display: none; }  /* 窄屏优先保舞台，英雄池交给操作台 */
+  .dir-winrate { grid-template-columns: 1fr; gap: 6px; }
+  .dw-side.red { align-items: flex-start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dir-pick.pending, .dir-pick.live, .dir-ban.pending, .dir-pick.turn-leave,
+  .dir-pick.preview.fly-in.hero-image-ready .slot-img,
+  .dir-pick.just-confirmed, .dir-pick.just-confirmed.turn-leave, .dir-pick.just-confirmed::after,
+  .dir-pick.just-confirmed .slot-img,
+  .dir-ban.just-confirmed .slot-img, .dir-timer.warning { animation: none; }
+  /* 关掉动效时粒子层要整层收起来，否则会停在 translateX 起点留一坨亮点。
+   * flex-basis 的静态值不受影响：待选格照样是大的，只是不做放大动画。 */
+  .dir-pick.just-confirmed::after { opacity: 0; }
+}
+
+/* Reference broadcast board: two banks of five portraits, bans above them.
+   The existing director controls and rule-driven roles remain independent
+   of the solo/online match screen. */
+#director-screen {
+  background: linear-gradient(100deg,#03091ddd,#03091d99),url('assets/finals-night.png') center/cover;
+}
+#director-screen:not(.draft-complete) .dir-body {
+  grid-template-columns: clamp(170px,calc((100vh - 160px) * .26),300px) minmax(0,1fr) clamp(170px,calc((100vh - 160px) * .26),300px);
+}
+#director-screen.draft-complete .dir-body {
+  grid-template-columns: minmax(0,1fr) clamp(72px,9vw,160px) minmax(0,1fr);
+  grid-template-rows: 124px minmax(165px,1fr) 76px;
+  gap: 10px;
+}
+#director-screen.draft-complete .dir-mid { display: contents; }
+#director-screen .dir-top { border-radius: 2px; background: #050b1a88; }
+#director-screen.draft-complete .dir-top { grid-column: 1/-1; grid-row: 1; }
+#director-screen.draft-complete .dir-col { grid-row: 2; min-width: 0; --col-gap: 7px; }
+#director-screen.draft-complete .dir-col.blue { grid-column: 1; }
+#director-screen.draft-complete .dir-col.red { grid-column: 3; }
+#director-screen.draft-complete .dir-col .dir-picks { flex-direction: row; min-height: 0; }
+#director-screen .dir-pick { min-width: 0; border-radius: 3px; --name-h: 30px; }
+#director-screen:not(.draft-complete) .dir-pick { align-self: center; }
+#director-screen:not(.draft-complete) .dir-picks .dir-pick,
+#director-screen:not(.draft-complete) .dir-picks.all-filled .dir-pick { flex-grow: 0; flex-shrink: 0; }
+#director-screen.draft-complete .dir-pick { height: 100%; }
+#director-screen.draft-complete .dir-pick .slot-img { object-position: center; }
+#director-screen.draft-complete .dir-slot-name { height: 58px; font-size: clamp(13px,1.3vw,22px); font-weight: 700; }
+#director-screen .dir-pick .slot-img { height: 100%; width: 100%; object-fit: cover; object-position: center; }
+#director-screen.draft-complete .dir-pick .slot-img { height: calc(100% - var(--name-h)); object-fit: contain; }
+#director-screen.draft-complete .dir-pick { --name-h: 58px; }
+#director-screen .dir-slot-name { height: 30px; border: 0; background: linear-gradient(transparent,#030713ee); }
+#director-screen .dir-winrate { border-radius: 2px; padding: 7px 18px; }
+#director-screen.draft-complete .dir-winrate { grid-column: 1/-1; grid-row: 3; }
+#director-screen .dir-pool { display: flex; border-radius: 2px; }
+#director-screen.draft-complete .dir-pool { display: none; }
+#director-screen .dir-grid { grid-template-columns: repeat(auto-fill,minmax(62px,1fr)); }
+#director-screen .dir-emblem { display: none; }
+#director-screen.draft-complete .dir-emblem { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 14px; color: #e8dfc9; text-align: center; }
+.dir-emblem span { font-size: 9px; letter-spacing: 2px; opacity: .6; }
+.dir-emblem strong { font-size: clamp(14px,1.8vw,27px); font-style: italic; }
+.dir-emblem small { font-size: 12px; letter-spacing: 3px; }
+#director-screen .dir-ban { border-radius: 3px; border-width: 1px; }
+#director-screen .dir-foot { border-radius: 2px; }
+.dir-btn:disabled { opacity: .4; cursor: not-allowed; }
+#director-screen .dir-confirm { bottom: 72px; border-radius: 3px; }
+/* Animate only after decoded pixels exist; the frame clips the incoming art. */
+#director-screen .dir-pick.preview .slot-img,
+#director-screen .dir-ban.preview .slot-img { opacity: 1; }
+#director-screen .preview.fly-in.hero-image-ready .slot-img { animation: dirIconFlyIn .5s cubic-bezier(.16,.84,.22,1) both; }
+@keyframes dirIconFlyIn {
+  0% { transform: translateY(-105%) scale(1.12); opacity: 0; filter: brightness(1.5) blur(3px); }
+  50% { opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; filter: none; }
+}
+#director-screen .dir-pick.just-confirmed .slot-img { animation: none; }
+#director-screen .dir-pick.just-confirmed::after,
+#director-screen .dir-pick.just-confirmed.hero-image-ready::after { content: none; }
+.dir-lock-scan { position: absolute; left: 0; right: 0; bottom: -30%; height: 30%; z-index: 12; pointer-events: none; background: linear-gradient(0deg,transparent,#ffebc56b 23%,#fffbe9f5 48%,#ffebc5b8 65%,transparent); mix-blend-mode: screen; }
+.dir-lock-edge { position: absolute; inset: 0; z-index: 11; border: 2px solid #fff0ad; box-shadow: inset 0 0 18px #ffd66699; pointer-events: none; }
+#director-screen .dir-pick.pending,
+#director-screen .dir-pick.live,
+#director-screen .dir-ban.pending { border-color: #ffe58a; animation: dirPendingGold 1.6s ease-in-out infinite; }
+#director-screen .dir-pick.pending.turn-enter { animation: dirPendingGold 1.6s ease-in-out infinite,dirSlotGrow .42s cubic-bezier(.22,.78,.24,1) both; }
+#director-screen .dir-pick.pending::before,
+#director-screen .dir-pick.live::before { background: none; border: 1px solid #fff0a6; opacity: .65; }
+@keyframes dirPendingGold {
+  0%,100% { border-color: #bda66a; box-shadow: inset 0 0 0 1px #ffe58a22,inset 0 0 6px #ffd66b33,0 0 5px #ffd66b33; }
+  50% { border-color: #fff0a6; box-shadow: inset 0 0 0 1px #fff0a699,inset 0 0 16px #ffd66b66,0 0 20px #ffd66b88; }
+}
+#director-screen.peak-reveal .dir-phase { color:#ffe8a6; text-shadow:0 0 12px #ffd66b99; letter-spacing:2px; }
+
+/* ---- 巅峰对决定格：双方同位置同时弹框 ----
+ * 复用单机/联机 #freeze-overlay 的那套 material（.freeze-card / .freeze-poster /
+ * .freeze-type / .freeze-team / 粒子层都在 style.css 里定义），这里只负责
+ * "并排两张卡 + 全屏压暗"这一层新布局；每路停留时长是 JS 里的 PEAK_HOLD_MS。 */
+.dir-freeze {
+  position: fixed; inset: 0; z-index: 2100;
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(1200px 700px at 50% 40%, rgba(40,52,88,.94), rgba(5,8,18,.98) 75%);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  cursor: pointer;                 /* 整层可点：点一下直接跳到下一路 */
+}
+.dir-freeze.show { display: flex; }
+.dir-freeze::before {
+  content: ""; position: absolute; inset: 0; opacity: .5; pointer-events: none;
+  background:
+    radial-gradient(700px 200px at 50% 0, rgba(245,197,66,.16), transparent 70%),
+    radial-gradient(300px 300px at 12% 90%, rgba(59,130,246,.12), transparent 70%),
+    radial-gradient(300px 300px at 88% 90%, rgba(239,68,68,.12), transparent 70%);
+}
+.dir-freeze-stage {
+  position: relative; z-index: 2; display: flex; align-items: center; justify-content: center;
+  gap: clamp(14px, 2.2vw, 46px); width: 100%; padding: 0 clamp(12px, 2vw, 32px);
+}
+.dir-freeze .dir-freeze-card { flex: 1 1 0; min-width: 0; max-width: 620px; }
+/* 单机/联机的定格海报是 min(600px,80vw) 一张独占整屏；这里两张并排，宽度必须减半 */
+.dir-freeze .freeze-poster { width: 100%; margin-bottom: 12px; }
+.dir-freeze .freeze-team { color: var(--gold); }
+.dir-freeze-vs {
+  flex: 0 0 auto; font: italic 900 clamp(20px, 2.4vw, 38px)/1 'Bahnschrift','Segoe UI',sans-serif;
+  color: #f5c542; letter-spacing: 2px; text-shadow: 0 0 18px rgba(245,197,66,.55);
+}
+.dir-freeze .freeze-tip { position: relative; z-index: 2; }
+.dir-freeze-pos { color: #f5c542; font-size: 16px; }
+@media (max-width: 900px) {
+  .dir-freeze-stage { flex-direction: column; gap: 10px; }
+  .dir-freeze .freeze-poster { width: min(560px, 88vw); }
+  .dir-freeze-vs { transform: rotate(90deg); }
+}
+/* ---- 巅峰对决 · 排列阵容顺序 ----
+ * 定格五路走完之后的最后一步：不自动切竖版，先让导播排顺序。
+ * 视觉沿用定格层那套金色语言（同色系渐变 + 细金边），但**卡片不做进场动画** ——
+ * 排一次序就重绘一次行，带进场动画的话每拖一下整行都会闪。
+ * 只有面板本身播一次淡入（面板不会被重绘）。 */
+.dir-order {
+  position: fixed; inset: 0; z-index: 2150;
+  display: none; align-items: center; justify-content: center;
+  padding: clamp(10px, 2vw, 28px);
+  background: radial-gradient(1200px 700px at 50% 30%, rgba(38,48,82,.96), rgba(5,8,18,.985) 76%);
+  backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+}
+.dir-order.show { display: flex; }
+.dir-order::before {
+  content: ""; position: absolute; inset: 0; opacity: .45; pointer-events: none;
+  background:
+    radial-gradient(700px 220px at 50% 0, rgba(245,197,66,.18), transparent 70%),
+    radial-gradient(340px 340px at 10% 92%, rgba(59,130,246,.14), transparent 70%),
+    radial-gradient(340px 340px at 90% 92%, rgba(239,68,68,.14), transparent 70%);
+}
+.dir-order-panel {
+  position: relative; z-index: 2; width: min(1180px, 96vw); max-height: 94vh;
+  display: flex; flex-direction: column; gap: clamp(10px, 1.4vh, 20px);
+  padding: clamp(14px, 2vh, 26px) clamp(14px, 2vw, 30px);
+  border: 1px solid rgba(245,197,66,.34); border-radius: 16px;
+  background: linear-gradient(180deg, rgba(20,26,46,.86), rgba(10,14,28,.92));
+  box-shadow: 0 26px 80px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,232,166,.06);
+  overflow: auto;
+}
+.dir-order.show .dir-order-panel { animation: dirOrderIn .34s cubic-bezier(.22,.78,.24,1) both; }
+@keyframes dirOrderIn { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+.dir-order-head { display: flex; flex-direction: column; gap: 4px; text-align: center; }
+.dir-order-title {
+  font: 800 clamp(16px, 1.5vw, 24px)/1.2 'Bahnschrift','Segoe UI',sans-serif;
+  color: #ffe8a6; letter-spacing: 2px; text-shadow: 0 0 14px rgba(255,214,107,.4);
+}
+.dir-order-hint { font-size: 12px; color: #9fb0d0; }
+
+.dir-order-row { display: flex; align-items: center; gap: clamp(8px, 1vw, 18px); }
+.dir-order-side { flex: 0 0 auto; width: clamp(64px, 7vw, 96px); display: flex; flex-direction: column; gap: 2px; }
+.dir-order-side b { font: 800 15px/1.2 'Bahnschrift','Segoe UI',sans-serif; letter-spacing: 1px; }
+.dir-order-side span { font-size: 11px; color: #8595b6; }
+.dir-order-row[data-side="blue"] .dir-order-side b { color: #7fb2ff; }
+.dir-order-row[data-side="red"] .dir-order-side b { color: #ff8f8f; }
+
+.dir-order-track {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch;
+  gap: clamp(6px, .7vw, 12px); padding: 6px 8px; border-radius: 12px;
+  background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07);
+}
+.dir-order-row[data-side="blue"] .dir-order-track { border-color: rgba(96,150,255,.28); }
+.dir-order-row[data-side="red"]  .dir-order-track { border-color: rgba(255,120,120,.28); }
+
+.dir-order-card {
+  position: relative; flex: 1 1 0; min-width: 0; max-width: 190px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 5px; border-radius: 10px; cursor: grab;
+  border: 1px solid rgba(255,255,255,.12);
+  background: linear-gradient(180deg, rgba(30,38,62,.9), rgba(14,19,34,.9));
+  touch-action: none;               /* 拖拽时别让浏览器抢去做滚动/选择 */
+  user-select: none;
+}
+.dir-order-card:hover { border-color: rgba(245,197,66,.5); }
+.dir-order-card .dor-img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 7px; display: block; }
+/* 图片默认可拖：浏览器一抢就发 pointercancel，卡片的拖动排序会当场断掉 */
+.dir-order-card img { -webkit-user-drag: none; user-select: none; }
+.dir-order-card .dor-num {
+  position: absolute; top: 8px; left: 8px; z-index: 2;
+  min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font: 800 11px/1 'Bahnschrift','Segoe UI',sans-serif;
+  color: #14181f; background: #f5c542; box-shadow: 0 0 10px rgba(245,197,66,.5);
+}
+.dir-order-card .dor-name { font-size: 12.5px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dir-order-row[data-side="blue"] .dir-order-card .dor-name { color: #cfe2ff; }
+.dir-order-row[data-side="red"]  .dir-order-card .dor-name { color: #ffd8d8; }
+.dir-order-card .dor-role { font-size: 10.5px; color: #8595b6; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dir-order-card.selected { border-color: #ffe58a; box-shadow: 0 0 0 2px rgba(255,229,138,.55), 0 0 18px rgba(255,214,107,.4); }
+.dir-order-card.dragging { opacity: .3; }
+/* 落点 = 要跟它互换的那一格（不是"插到它前面"）：冷色 + 互换角标，
+   跟"选中"的金色区分开，一眼能看出这一下是换位不是插入 */
+.dir-order-card.drop-target {
+  border-color: #7dd3fc;
+  box-shadow: inset 0 0 0 2px rgba(125,211,252,.55), 0 0 20px rgba(125,211,252,.45);
+}
+.dir-order-card.drop-target::after {
+  content: "⇄"; position: absolute; top: 7px; right: 7px; z-index: 3;
+  min-width: 20px; height: 20px; padding: 0 3px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font: 800 12px/1 'Bahnschrift','Segoe UI',sans-serif;
+  color: #06202e; background: #7dd3fc; box-shadow: 0 0 12px rgba(125,211,252,.7);
+}
+/* 跟手的那张（clone），fixed 定位、不吃指针事件。
+   必须比目标格**小一圈**：同尺寸的话它会把目标格整个盖住，
+   底下的落点光圈和 ⇄ 角标就全看不见了，等于没有反馈。 */
+.dir-order-ghost {
+  position: fixed; z-index: 2160; pointer-events: none; margin: 0;
+  opacity: .9; transform: rotate(-2deg) scale(.82); transform-origin: 50% 50%;
+  box-shadow: 0 18px 40px rgba(0,0,0,.65);
+}
+
+.dir-order-foot { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.dir-order-btn {
+  padding: 9px 22px; border-radius: 10px; cursor: pointer;
+  font: 700 14px/1 'Bahnschrift','Segoe UI',sans-serif; letter-spacing: 1px;
+  border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #dbe4f5;
+}
+.dir-order-btn:hover { background: rgba(255,255,255,.12); }
+.dir-order-btn.go { border-color: #f5c542; color: #1a1405; background: linear-gradient(180deg,#ffe08a,#f2b731); box-shadow: 0 6px 20px rgba(245,197,66,.32); }
+.dir-order-btn.go:hover { filter: brightness(1.06); }
+
+@media (max-width: 760px) {
+  .dir-order-row { flex-direction: column; align-items: stretch; }
+  .dir-order-side { flex-direction: row; align-items: baseline; gap: 8px; width: auto; }
+  .dir-order-track { overflow-x: auto; }
+  .dir-order-card { flex: 0 0 auto; width: 84px; }
+}
+
+@keyframes dirSweep {
+  0% { transform: translateY(0); opacity: 0; }
+  18%,75% { opacity: 1; }
+  100% { transform: translateY(-520%); opacity: 0; }
+}
+@media(max-width:820px) {
+  #director-screen { overflow-y: auto; }
+  #director-screen .dir-head { flex-wrap: wrap; gap: 6px; }
+  #director-screen .dir-head .dh-spacer, #director-screen .dh-chip { display: none; }
+  #director-screen .dir-body, #director-screen:not(.draft-complete) .dir-body, #director-screen.draft-complete .dir-body { flex: 0 0 auto; grid-template-columns: 1fr; grid-template-rows: auto 170px 170px auto 260px; }
+  #director-screen:not(.draft-complete) .dir-pick { align-self: stretch; }
+  #director-screen .dir-mid { display: contents; }
+  #director-screen .dir-top { grid-column: 1; grid-row: 1; }
+  #director-screen .dir-col .dir-picks { flex-direction: row; }
+  #director-screen .dir-top { grid-template-columns: 1fr 80px 1fr; padding: 6px; gap: 6px; }
+  #director-screen .dir-col.blue, #director-screen.draft-complete .dir-col.blue { grid-column: 1; grid-row: 2; }
+  #director-screen .dir-col.red, #director-screen.draft-complete .dir-col.red { grid-column: 1; grid-row: 3; }
+  #director-screen.draft-complete .dir-emblem { display: none; }
+  #director-screen .dir-winrate, #director-screen.draft-complete .dir-winrate { grid-column: 1; grid-row: 4; }
+  #director-screen .dir-pool { grid-column: 1; grid-row: 5; }
+  #director-screen.draft-complete .dir-body { grid-template-rows: auto 170px 170px auto; }
+  #director-screen .dir-confirm { position: sticky; flex: 0 0 auto; left: auto; bottom: 8px; transform: none; justify-content: center; }
+  #director-screen .dir-ban { width: clamp(20px,5vw,34px); height: clamp(20px,5vw,34px); }
+}
+@media(prefers-reduced-motion:reduce) {
+  #director-screen .preview.fly-in.hero-image-ready .slot-img,
+  #director-screen .dir-pick.just-confirmed.hero-image-ready .slot-img,
+  #director-screen .dir-pick.just-confirmed.hero-image-ready::after { animation: none; }
+}

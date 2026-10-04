@@ -1,0 +1,875 @@
+{
+  "source": "https://wucebp.top/",
+  "fetchedAt": "2026-10-02T15:11:44.726Z",
+  "note": "BGM 为签名链接，已一次性落地；签名有效期约 1 小时，过期需重跑本脚本。",
+  "music": [
+    {
+      "key": "01_regular",
+      "label": "常规赛",
+      "file": "music/01_regular.mp3"
+    },
+    {
+      "key": "02_tiaozhanzhebei2023",
+      "label": "2023 挑战者杯",
+      "file": "music/02_tiaozhanzhebei2023.mp3"
+    },
+    {
+      "key": "03_KIC",
+      "label": "KIC",
+      "file": "music/03_KIC.mp3"
+    },
+    {
+      "key": "04_nianzongshiguan",
+      "label": "年总世冠",
+      "file": "music/04_nianzongshiguan.mp3"
+    },
+    {
+      "key": "05_peak",
+      "label": "巅峰对决",
+      "file": "music/05_peak.mp3",
+      "peak": true
+    },
+    {
+      "key": "06_LCK2025",
+      "label": "LCK 2025 BP",
+      "file": "music/06_LCK2025.mp3"
+    }
+  ],
+  "voice": [
+    {
+      "name": "艾琳",
+      "pinyin": "ailin",
+      "stem": "ailin",
+      "file": "voice/ailin.mp3"
+    },
+    {
+      "name": "敖隐",
+      "pinyin": "aoyin",
+      "stem": "aoyin",
+      "file": "voice/aoyin.mp3"
+    },
+    {
+      "name": "百里守约",
+      "pinyin": "bailishouyue",
+      "stem": "baili",
+      "file": "voice/baili.mp3"
+    },
+    {
+      "name": "狄仁杰",
+      "pinyin": "direnjie",
+      "stem": "direnjie",
+      "file": "voice/direnjie.mp3"
+    },
+    {
+      "name": "戈娅",
+      "pinyin": "geya",
+      "stem": "geya",
+      "file": "voice/geya.mp3"
+    },
+    {
+      "name": "公孙离",
+      "pinyin": "gongsunli",
+      "stem": "gongsunli",
+      "file": "voice/gongsunli.mp3"
+    },
+    {
+      "name": "后羿",
+      "pinyin": "houyi",
+      "stem": "houyi",
+      "file": "voice/houyi.mp3"
+    },
+    {
+      "name": "黄忠",
+      "pinyin": "huangzhong",
+      "stem": "huangzhong",
+      "file": "voice/huangzhong.mp3"
+    },
+    {
+      "name": "伽罗",
+      "pinyin": "jialuo",
+      "stem": "jialuo",
+      "file": "voice/jialuo.mp3"
+    },
+    {
+      "name": "莱西奥",
+      "pinyin": "laixiao",
+      "stem": "laixiao",
+      "file": "voice/laixiao.mp3"
+    },
+    {
+      "name": "李元芳",
+      "pinyin": "liyuanfang",
+      "stem": "liyuanfang",
+      "file": "voice/liyuanfang.mp3"
+    },
+    {
+      "name": "鲁班七号",
+      "pinyin": "lubanqihao",
+      "stem": "lubanqihao",
+      "file": "voice/lubanqihao.mp3"
+    },
+    {
+      "name": "马可波罗",
+      "pinyin": "makeboluo",
+      "stem": "make",
+      "file": "voice/make.mp3"
+    },
+    {
+      "name": "蒙犽",
+      "pinyin": "mengya",
+      "stem": "mengya",
+      "file": "voice/mengya.mp3"
+    },
+    {
+      "name": "孙尚香",
+      "pinyin": "sunsangxiang",
+      "stem": "sunshangxiang",
+      "file": "voice/sunshangxiang.mp3"
+    },
+    {
+      "name": "虞姬",
+      "pinyin": "yuji",
+      "stem": "yuji",
+      "file": "voice/yuji.mp3"
+    },
+    {
+      "name": "发育丹",
+      "pinyin": "fayudan",
+      "stem": "fayudan",
+      "file": null,
+      "error": "404 https://wucebp.top/static-asset/heroci/fayudan.MP3"
+    },
+    {
+      "name": "对抗丹",
+      "pinyin": "duikangdan",
+      "stem": "duikangdan",
+      "file": null,
+      "error": "404 https://wucebp.top/static-asset/heroci/duikangdan.MP3"
+    },
+    {
+      "name": "孙权",
+      "pinyin": "sunquan",
+      "stem": "sunquan",
+      "file": "voice/sunquan.mp3"
+    },
+    {
+      "name": "苍",
+      "pinyin": "cang",
+      "stem": "cang",
+      "file": "voice/cang.mp3"
+    },
+    {
+      "name": "元流射手",
+      "pinyin": "yuanliusheshou",
+      "stem": "yuanliusheshou",
+      "file": "voice/yuanliusheshou.mp3"
+    },
+    {
+      "name": "大禹",
+      "pinyin": "dayu",
+      "stem": "dayu",
+      "file": "voice/dayu.mp3"
+    },
+    {
+      "name": "少司缘",
+      "pinyin": "shaosiyuan",
+      "stem": "shaosiyuan",
+      "file": "voice/shaosiyuan.mp3"
+    },
+    {
+      "name": "蔡文姬",
+      "pinyin": "caiwenji",
+      "stem": "caiwenji",
+      "file": "voice/caiwenji.mp3"
+    },
+    {
+      "name": "大乔",
+      "pinyin": "daqiao",
+      "stem": "daqiao",
+      "file": "voice/daqiao.mp3"
+    },
+    {
+      "name": "东皇太一",
+      "pinyin": "donghuangtaiyi",
+      "stem": "donghuang",
+      "file": "voice/donghuang.mp3"
+    },
+    {
+      "name": "盾山",
+      "pinyin": "dunshan",
+      "stem": "dunshan",
+      "file": "voice/dunshan.mp3"
+    },
+    {
+      "name": "朵莉亚",
+      "pinyin": "duoliya",
+      "stem": "duoliya",
+      "file": "voice/duoliya.mp3"
+    },
+    {
+      "name": "鬼谷子",
+      "pinyin": "guiguzi",
+      "stem": "guiguzi",
+      "file": "voice/guiguzi.mp3"
+    },
+    {
+      "name": "刘禅",
+      "pinyin": "liuchan",
+      "stem": "liushan",
+      "file": "voice/liushan.mp3"
+    },
+    {
+      "name": "鲁班大师",
+      "pinyin": "lubandashi",
+      "stem": "dashi",
+      "file": "voice/dashi.mp3"
+    },
+    {
+      "name": "明世隐",
+      "pinyin": "mingshiyin",
+      "stem": "minshiyin",
+      "file": "voice/minshiyin.mp3"
+    },
+    {
+      "name": "桑启",
+      "pinyin": "sangqi",
+      "stem": "sangqi",
+      "file": "voice/sangqi.mp3"
+    },
+    {
+      "name": "苏烈",
+      "pinyin": "sulie",
+      "stem": "sulie",
+      "file": "voice/sulie.mp3"
+    },
+    {
+      "name": "孙膑",
+      "pinyin": "sunbin",
+      "stem": "sunbin",
+      "file": "voice/sunbin.mp3"
+    },
+    {
+      "name": "太乙真人",
+      "pinyin": "taiyizhenren",
+      "stem": "taiyi",
+      "file": "voice/taiyi.mp3"
+    },
+    {
+      "name": "瑶",
+      "pinyin": "yao",
+      "stem": "yao",
+      "file": "voice/yao.mp3"
+    },
+    {
+      "name": "张飞",
+      "pinyin": "zhangfei",
+      "stem": "zhangfei",
+      "file": "voice/zhangfei.mp3"
+    },
+    {
+      "name": "钟馗",
+      "pinyin": "zhongkui",
+      "stem": "zhongkui",
+      "file": "voice/zhongkui.mp3"
+    },
+    {
+      "name": "庄周",
+      "pinyin": "zhuangzhou",
+      "stem": "zhuangzhou",
+      "file": "voice/zhuangzhou.mp3"
+    },
+    {
+      "name": "游走丹",
+      "pinyin": "fudan",
+      "stem": "fudan",
+      "file": null,
+      "error": "404 https://wucebp.top/static-asset/heroci/fudan.MP3"
+    },
+    {
+      "name": "空空儿",
+      "pinyin": "kongkonger",
+      "stem": "kke",
+      "file": "voice/kke.mp3"
+    },
+    {
+      "name": "元流辅助",
+      "pinyin": "yuanliufuzhu",
+      "stem": "yuanliufuzhu",
+      "file": "voice/yuanliufuzhu.mp3"
+    },
+    {
+      "name": "牛魔",
+      "pinyin": "niumo",
+      "stem": "niumo",
+      "file": "voice/niumo.mp3"
+    },
+    {
+      "name": "安琪拉",
+      "pinyin": "anqila",
+      "stem": "anqila",
+      "file": "voice/anqila.mp3"
+    },
+    {
+      "name": "扁鹊",
+      "pinyin": "bianque",
+      "stem": "bianque",
+      "file": "voice/bianque.mp3"
+    },
+    {
+      "name": "不知火舞",
+      "pinyin": "buzhihuowu",
+      "stem": "buzhihuowu",
+      "file": "voice/buzhihuowu.mp3"
+    },
+    {
+      "name": "嫦娥",
+      "pinyin": "change",
+      "stem": "change",
+      "file": "voice/change.mp3"
+    },
+    {
+      "name": "貂蝉",
+      "pinyin": "diaochan",
+      "stem": "diaochan",
+      "file": "voice/diaochan.mp3"
+    },
+    {
+      "name": "干将莫邪",
+      "pinyin": "ganjiangmoye",
+      "stem": "ganjiang",
+      "file": "voice/ganjiang.mp3"
+    },
+    {
+      "name": "高渐离",
+      "pinyin": "gaojianli",
+      "stem": "gaojianli",
+      "file": "voice/gaojianli.mp3"
+    },
+    {
+      "name": "海月",
+      "pinyin": "haiyue",
+      "stem": "haiyue",
+      "file": "voice/haiyue.mp3"
+    },
+    {
+      "name": "姜子牙",
+      "pinyin": "jiangziya",
+      "stem": "jiangziya",
+      "file": "voice/jiangziya.mp3"
+    },
+    {
+      "name": "金蝉",
+      "pinyin": "jinchan",
+      "stem": "jinchan",
+      "file": "voice/jinchan.mp3"
+    },
+    {
+      "name": "米莱狄",
+      "pinyin": "milaidi",
+      "stem": "milaidi",
+      "file": "voice/milaidi.mp3"
+    },
+    {
+      "name": "墨子",
+      "pinyin": "mozi",
+      "stem": "mozi",
+      "file": "voice/mozi.mp3"
+    },
+    {
+      "name": "上官婉儿",
+      "pinyin": "shangguanwaner",
+      "stem": "waner",
+      "file": "voice/waner.mp3"
+    },
+    {
+      "name": "沈梦溪",
+      "pinyin": "shenmengxi",
+      "stem": "shenmengxi",
+      "file": "voice/shenmengxi.mp3"
+    },
+    {
+      "name": "王昭君",
+      "pinyin": "wangzhaojun",
+      "stem": "wangzhaojun",
+      "file": "voice/wangzhaojun.mp3"
+    },
+    {
+      "name": "小乔",
+      "pinyin": "xiaoqiao",
+      "stem": "xiaoqiao",
+      "file": "voice/xiaoqiao.mp3"
+    },
+    {
+      "name": "西施",
+      "pinyin": "xishi",
+      "stem": "xishi",
+      "file": "voice/xishi.mp3"
+    },
+    {
+      "name": "嬴政",
+      "pinyin": "yingzheng",
+      "stem": "yinzhen",
+      "file": "voice/yinzhen.mp3"
+    },
+    {
+      "name": "弈星",
+      "pinyin": "yixing",
+      "stem": "yixing",
+      "file": "voice/yixing.mp3"
+    },
+    {
+      "name": "张良",
+      "pinyin": "zhangliang",
+      "stem": "zhangliang",
+      "file": "voice/zhangliang.mp3"
+    },
+    {
+      "name": "杨玉环",
+      "pinyin": "yangyuhuan",
+      "stem": "yangyuhuan",
+      "file": "voice/yangyuhuan.mp3"
+    },
+    {
+      "name": "甄姬",
+      "pinyin": "zhenji",
+      "stem": "zhenji",
+      "file": "voice/zhenji.mp3"
+    },
+    {
+      "name": "周瑜",
+      "pinyin": "zhouyu",
+      "stem": "zhouyu",
+      "file": "voice/zhouyu.mp3"
+    },
+    {
+      "name": "中丹",
+      "pinyin": "zhongdan",
+      "stem": "zhongdan",
+      "file": null,
+      "error": "404 https://wucebp.top/static-asset/heroci/zhongdan.MP3"
+    },
+    {
+      "name": "这艺娜",
+      "pinyin": "zheyina",
+      "stem": "nayina",
+      "file": "voice/nayina.mp3"
+    },
+    {
+      "name": "元流法师",
+      "pinyin": "yuanliufashi",
+      "stem": "yuanliufashi",
+      "file": "voice/yuanliufashi.mp3"
+    },
+    {
+      "name": "女娲",
+      "pinyin": "nvwa",
+      "stem": "nvwa",
+      "file": "voice/nvwa.mp3"
+    },
+    {
+      "name": "妲己",
+      "pinyin": "daji",
+      "stem": "daji",
+      "file": "voice/daji.mp3"
+    },
+    {
+      "name": "武则天",
+      "pinyin": "wuzetian",
+      "stem": "wuzetian",
+      "file": "voice/wuzetian.mp3"
+    },
+    {
+      "name": "诸葛亮",
+      "pinyin": "zhugeliang",
+      "stem": "zhugeliang",
+      "file": "voice/zhugeliang.mp3"
+    },
+    {
+      "name": "司马懿",
+      "pinyin": "simayi",
+      "stem": "simayi",
+      "file": "voice/simayi.mp3"
+    },
+    {
+      "name": "是吗",
+      "pinyin": "Jane",
+      "stem": "jane",
+      "file": null,
+      "error": "404 https://wucebp.top/static-asset/heroci/jane.MP3"
+    },
+    {
+      "name": "海诺",
+      "pinyin": "hainuo",
+      "stem": "hainuo",
+      "file": "voice/hainuo.mp3"
+    },
+    {
+      "name": "阿古朵",
+      "pinyin": "aguduo",
+      "stem": "aguduo",
+      "file": "voice/aguduo.mp3"
+    },
+    {
+      "name": "阿轲",
+      "pinyin": "ake",
+      "stem": "ake",
+      "file": "voice/ake.mp3"
+    },
+    {
+      "name": "百里玄策",
+      "pinyin": "bailixuance",
+      "stem": "xuance",
+      "file": "voice/xuance.mp3"
+    },
+    {
+      "name": "典韦",
+      "pinyin": "dianwei",
+      "stem": "dianwei",
+      "file": "voice/dianwei.mp3"
+    },
+    {
+      "name": "宫本武藏",
+      "pinyin": "gongbenwuzang",
+      "stem": "gongben",
+      "file": "voice/gongben.mp3"
+    },
+    {
+      "name": "韩信",
+      "pinyin": "hanxin",
+      "stem": "hanxin",
+      "file": "voice/hanxin.mp3"
+    },
+    {
+      "name": "镜",
+      "pinyin": "jing",
+      "stem": "jin",
+      "file": "voice/jin.mp3"
+    },
+    {
+      "name": "橘右京",
+      "pinyin": "juyoujing",
+      "stem": "juyoujing",
+      "file": "voice/juyoujing.mp3"
+    },
+    {
+      "name": "铠",
+      "pinyin": "kai",
+      "stem": "kai",
+      "file": "voice/kai.mp3"
+    },
+    {
+      "name": "澜",
+      "pinyin": "lan",
+      "stem": "lan",
+      "file": "voice/lan.mp3"
+    },
+    {
+      "name": "兰陵王",
+      "pinyin": "lanlingwang",
+      "stem": "lanlingwang",
+      "file": "voice/lanlingwang.mp3"
+    },
+    {
+      "name": "李白",
+      "pinyin": "libai",
+      "stem": "libai",
+      "file": "voice/libai.mp3"
+    },
+    {
+      "name": "露娜",
+      "pinyin": "luna",
+      "stem": "luna",
+      "file": "voice/luna.mp3"
+    },
+    {
+      "name": "娜可露露",
+      "pinyin": "nakelulu",
+      "stem": "nake",
+      "file": "voice/nake.mp3"
+    },
+    {
+      "name": "裴擒虎",
+      "pinyin": "peiqinhu",
+      "stem": "peiqinhu",
+      "file": "voice/peiqinhu.mp3"
+    },
+    {
+      "name": "孙悟空",
+      "pinyin": "sunwukong",
+      "stem": "sunwukong",
+      "file": "voice/sunwukong.mp3"
+    },
+    {
+      "name": "曜",
+      "pinyin": "yao",
+      "stem": "dongfangyao",
+      "file": "voice/dongfangyao.mp3"
+    },
+    {
+      "name": "云缨",
+      "pinyin": "yunying",
+      "stem": "yunyin",
+      "file": "voice/yunyin.mp3"
+    },
+    {
+      "name": "赵云",
+      "pinyin": "zhaoyun",
+      "stem": "zhaoyun",
+      "file": "voice/zhaoyun.mp3"
+    },
+    {
+      "name": "野丹",
+      "pinyin": "yedan",
+      "stem": "yedan",
+      "file": null,
+      "error": "404 https://wucebp.top/static-asset/heroci/yedan.MP3"
+    },
+    {
+      "name": "大司命",
+      "pinyin": "dasiming",
+      "stem": "dasiming",
+      "file": "voice/dasiming.mp3"
+    },
+    {
+      "name": "暃",
+      "pinyin": "fei",
+      "stem": "fei",
+      "file": "voice/fei.mp3"
+    },
+    {
+      "name": "蚩奼",
+      "pinyin": "chicha",
+      "stem": "chicha",
+      "file": "voice/chicha.mp3"
+    },
+    {
+      "name": "云中君",
+      "pinyin": "yunzhongjun",
+      "stem": "yunzhongjun",
+      "file": "voice/yunzhongjun.mp3"
+    },
+    {
+      "name": "刘备",
+      "pinyin": "liubei",
+      "stem": "liubei",
+      "file": "voice/liubei.mp3"
+    },
+    {
+      "name": "蒙恬",
+      "pinyin": "mengtian",
+      "stem": "mengtian",
+      "file": "voice/mengtian.mp3"
+    },
+    {
+      "name": "盘古",
+      "pinyin": "pangu",
+      "stem": "pangu",
+      "file": "voice/pangu.mp3"
+    },
+    {
+      "name": "姬小满",
+      "pinyin": "jixiaoman",
+      "stem": "jixiaoman",
+      "file": "voice/jixiaoman.mp3"
+    },
+    {
+      "name": "孙策",
+      "pinyin": "sunce",
+      "stem": "sunce",
+      "file": "voice/sunce.mp3"
+    },
+    {
+      "name": "司空震",
+      "pinyin": "sikongzhen",
+      "stem": "sikongzhen",
+      "file": "voice/sikongzhen.mp3"
+    },
+    {
+      "name": "影",
+      "pinyin": "ying",
+      "stem": "ying",
+      "file": "voice/ying.mp3"
+    },
+    {
+      "name": "杨戬",
+      "pinyin": "yangjian",
+      "stem": "yangjian",
+      "file": "voice/yangjian.mp3"
+    },
+    {
+      "name": "元流坦克",
+      "pinyin": "yuanliutanke",
+      "stem": "yuanliutanke",
+      "file": "voice/yuanliutanke.mp3"
+    },
+    {
+      "name": "元流刺客",
+      "pinyin": "yuanliucike",
+      "stem": "yuanliucike",
+      "file": "voice/yuanliucike.mp3"
+    },
+    {
+      "name": "白起",
+      "pinyin": "baiqi",
+      "stem": "baiqi",
+      "file": "voice/baiqi.mp3"
+    },
+    {
+      "name": "曹操",
+      "pinyin": "caocao",
+      "stem": "caocao",
+      "file": "voice/caocao.mp3"
+    },
+    {
+      "name": "程咬金",
+      "pinyin": "chengyaojin",
+      "stem": "chengyaojin",
+      "file": "voice/chengyaojin.mp3"
+    },
+    {
+      "name": "达摩",
+      "pinyin": "damo",
+      "stem": "damo",
+      "file": "voice/damo.mp3"
+    },
+    {
+      "name": "关羽",
+      "pinyin": "guanyu",
+      "stem": "guanyu",
+      "file": "voice/guanyu.mp3"
+    },
+    {
+      "name": "花木兰",
+      "pinyin": "huamulan",
+      "stem": "huamulan",
+      "file": "voice/huamulan.mp3"
+    },
+    {
+      "name": "狂铁",
+      "pinyin": "kuangtie",
+      "stem": "kuangtie",
+      "file": "voice/kuangtie.mp3"
+    },
+    {
+      "name": "老夫子",
+      "pinyin": "laofuzi",
+      "stem": "laofuzi",
+      "file": "voice/laofuzi.mp3"
+    },
+    {
+      "name": "廉颇",
+      "pinyin": "lianpo",
+      "stem": "lianpo",
+      "file": "voice/lianpo.mp3"
+    },
+    {
+      "name": "吕布",
+      "pinyin": "lvbu",
+      "stem": "lvbu",
+      "file": "voice/lvbu.mp3"
+    },
+    {
+      "name": "马超",
+      "pinyin": "machao",
+      "stem": "machao",
+      "file": "voice/machao.mp3"
+    },
+    {
+      "name": "芈月",
+      "pinyin": "miyue",
+      "stem": "minyue",
+      "file": "voice/minyue.mp3"
+    },
+    {
+      "name": "夏侯惇",
+      "pinyin": "xiahoudun",
+      "stem": "xiahoudun",
+      "file": "voice/xiahoudun.mp3"
+    },
+    {
+      "name": "夏洛特",
+      "pinyin": "xialuote",
+      "stem": "xialuote",
+      "file": "voice/xialuote.mp3"
+    },
+    {
+      "name": "项羽",
+      "pinyin": "xiangyu",
+      "stem": "xiangyu",
+      "file": "voice/xiangyu.mp3"
+    },
+    {
+      "name": "亚瑟",
+      "pinyin": "yase",
+      "stem": "yase",
+      "file": "voice/yase.mp3"
+    },
+    {
+      "name": "钟无艳",
+      "pinyin": "zhongwuyan",
+      "stem": "zhongwuyan",
+      "file": "voice/zhongwuyan.mp3"
+    },
+    {
+      "name": "亚连",
+      "pinyin": "yalian",
+      "stem": "yalian",
+      "file": "voice/yalian.mp3"
+    },
+    {
+      "name": "元歌",
+      "pinyin": "yuange",
+      "stem": "yuange",
+      "file": "voice/yuange.mp3"
+    },
+    {
+      "name": "梦奇",
+      "pinyin": "mengqi",
+      "stem": "mengqi",
+      "file": "voice/mengqi.mp3"
+    },
+    {
+      "name": "猪八戒",
+      "pinyin": "zhubajie",
+      "stem": "zhubajie",
+      "file": "voice/zhubajie.mp3"
+    },
+    {
+      "name": "哪吒",
+      "pinyin": "nezha",
+      "stem": "nezha",
+      "file": "voice/nezha.mp3"
+    },
+    {
+      "name": "刘邦",
+      "pinyin": "liubang",
+      "stem": "liubang",
+      "file": "voice/liubang.mp3"
+    },
+    {
+      "name": "赵怀真",
+      "pinyin": "liubang",
+      "stem": "zhaohuaizhen",
+      "file": "voice/zhaohuaizhen.mp3"
+    },
+    {
+      "name": "李信",
+      "pinyin": "lixin",
+      "stem": "lixin",
+      "file": "voice/lixin.mp3"
+    },
+    {
+      "name": "心魔六耳",
+      "pinyin": "xinmoliuer",
+      "stem": "liuer",
+      "file": "voice/liuer.mp3"
+    },
+    {
+      "name": "卢雅那",
+      "pinyin": "luyana",
+      "stem": "luyana",
+      "file": "voice/luyana.mp3"
+    }
+  ],
+  "musicSource": "E:/CloudMusic/电台节目（本地自有曲目，非参考站镜像）"
+}
