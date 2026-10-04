@@ -1,0 +1,23 @@
+# Cloudflare Pages 响应头规则
+#
+# 背景：Pages 对静态资源的默认策略是 `Cache-Control: public, max-age=0, must-revalidate`。
+# 这意味着每次打开页面，浏览器都要拿着 ETag 回源问一遍"变了没有"——
+# 哪怕文件早就下过了。实测这一趟往返的首字节要 2~12 秒（大陆到台北节点），
+# 于是音频每次点都要重新等，且拖动进度条会反复触发。
+#
+# 音频文件内容稳定（曲目是从参考站一次性镜像落地的，不随代码更新而变化），
+# 所以改成一年强缓存：首次听要下载，之后每次都是零等待。
+#
+# ⚠️ 注意：音频 URL 没有 ?v= 版本号，所以**替换同名音频文件的内容**时，
+#    浏览器不会去取新的。要换内容请改文件名（如 06_LCK2025_v2.mp3）并同步
+#    更新 audio/manifest.json —— 或者临时把下面两段的 max-age 调小。
+
+/audio/music/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/audio/voice/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 清单要能及时反映文件变动，不能强缓存
+/audio/manifest.json
+  Cache-Control: no-cache

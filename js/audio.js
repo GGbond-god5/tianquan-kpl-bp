@@ -27,6 +27,8 @@
  *  - 第 7 局（巅峰对决）自动接管：清单里标了 peak 的曲目顶替用户选择，
  *    前提是音乐总开关是开的。用户在巅峰局手动换曲则本局内尊重手动选择，
  *    下一局重新接管。
+ *  - 资源预热：进入导播模式后后台把语音全量与当前曲目灌进 HTTP 缓存，
+ *    把"点击后才开始下载"的等待挪到用户还在摆布局的时候（见 warmCache）。
  * ============================================================ */
 (function () {
   "use strict";
@@ -40,10 +42,10 @@
 
   const bgm = new Audio();
   bgm.loop = true;
-  bgm.preload = "none";
+  bgm.preload = "auto";
 
   const voice = new Audio();
-  voice.preload = "none";
+  voice.preload = "auto";
 
   let musicEnabled = false;   // 总开关：默认不开启，由导播面板显式打开
   let voiceEnabled = true;    // 英雄语音默认开启
@@ -63,7 +65,7 @@
       if (duckTimer) clearTimeout(duckTimer);
       duckTimer = null;
       applyVolume();
-    } else syncMusic();
+    } else { syncMusic(); warmCache(); }
   }
 
   // 巅峰对决（第 7 局）：清单里 peak:true 的那首顶替用户选择。
@@ -94,6 +96,43 @@
   const AUDIO_BASE = new URL("audio/", location.href);
   function audioUrl(file) {
     return new URL(file, AUDIO_BASE).href;
+  }
+
+  /* ---------- 预热：把"点击后才下载"改成"进导播就后台下好" ----------
+   * 原来 preload="none" + 点击时才设 src，等于把整段下载时间摊到点击之后；
+   * 加上音频是强缓存资源，先在空闲时段灌进浏览器 HTTP 缓存，点击时命中缓存即可出声。
+   *
+   * 语音总量只有约 11 MB（132 个文件，平均 80 KB），全量预热是划算的；
+   * 音乐只热当前选中那一首 —— 单曲 3~18 MB，全热不划算。
+   *
+   * 只在首次进入导播模式时启动：在此之前 playVoice() 也会直接返回，
+   * 预热了也没人会听，白白占带宽。
+   */
+  let warmStarted = false;
+  function warmCache() {
+    if (warmStarted) return;
+    warmStarted = true;
+
+    const track = effectiveTrack();
+    if (track && track.file) void warmOne(track.file);
+
+    const files = (manifest?.voice || []).map((v) => v.file).filter(Boolean);
+    let i = 0;
+    const CONC = 3;   // 别把连接占满，否则会拖慢正在播放的音频
+    const worker = async () => {
+      while (i < files.length) await warmOne(files[i++]);
+    };
+    for (let k = 0; k < CONC; k++) void worker();
+  }
+
+  /** 取一个音频进缓存；失败静默 —— 预热是尽力而为，不能影响正常播放。
+   *  必须把 body 读掉：只拿到 Response 不读，浏览器可能在对象回收时中断下载，
+   *  HTTP 缓存就填不上，预热等于白做。 */
+  async function warmOne(file) {
+    try {
+      const r = await fetch(audioUrl(file), { cache: "force-cache" });
+      if (r.ok) await r.arrayBuffer();
+    } catch { /* 单个失败不影响其余 */ }
   }
 
   function applyVolume() {
