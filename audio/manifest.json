@@ -6,22 +6,22 @@
     {
       "key": "01_regular",
       "label": "常规赛",
-      "file": "music/01_regular.mp3"
+      "file": "music/01_regular.v2.mp3"
     },
     {
       "key": "02_tiaozhanzhebei2023",
       "label": "2023 挑战者杯",
-      "file": "music/02_tiaozhanzhebei2023.mp3"
+      "file": "music/02_tiaozhanzhebei2023.v2.mp3"
     },
     {
       "key": "03_KIC",
       "label": "KIC",
-      "file": "music/03_KIC.mp3"
+      "file": "music/03_KIC.v2.mp3"
     },
     {
       "key": "04_nianzongshiguan",
       "label": "年总世冠",
-      "file": "music/04_nianzongshiguan.mp3"
+      "file": "music/04_nianzongshiguan.v2.mp3"
     },
     {
       "key": "05_peak",
@@ -32,7 +32,7 @@
     {
       "key": "06_LCK2025",
       "label": "LCK 2025 BP",
-      "file": "music/06_LCK2025.mp3"
+      "file": "music/06_LCK2025.v2.mp3"
     }
   ],
   "voice": [
