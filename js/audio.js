@@ -4,6 +4,9 @@
  * 资源来源：audio/manifest.json（由 tools/fetch-audio.mjs 从参考站
  * wucebp.top 一次性镜像落地）。BGM 原站是约 1 小时过期的签名链接，
  * 不能运行时热链，故全部本地化 —— 离线可用。
+ * 清单里可选地给一个 "baseUrl"，把音频字节指向国内对象存储/CDN
+ * （站点在大陆走 Cloudflare 落台北节点，首字节 2~12 秒，是国内体验的唯一硬伤）。
+ * 不配就沿用同站 audio/，行为与从前完全一致。
  *
  * 对外接口（window.BPAudio）：
  *   ready()                 -> Promise，资源清单载入完成
@@ -93,10 +96,21 @@
 
   /** 清单里的 file 是相对 audio/ 的（如 "music/01_regular.mp3"），
    *  不是相对页面根 —— 按页面根解析会变成 /music/... 被静态白名单 403，
-   *  而且 <audio> 不会报错，只是永远不出声。所以必须钉死 audio/ 这个基准。 */
-  const AUDIO_BASE = new URL("audio/", location.href);
+   *  而且 <audio> 不会报错，只是永远不出声。所以必须钉死 audio/ 这个基准。
+   *
+   *  可切换：manifest.json 里给了 baseUrl 就用它（绝对地址或相对地址都行）。
+   *  这是给"音频挪到国内对象存储"留的口子 —— 站点在大陆走 Cloudflare 会落到
+   *  台北节点，首字节要 2~12 秒，这是免费版改不掉的硬天花板；把音频字节挪到
+   *  国内 CDN 才能真正做到"点击即有"。清单本身留在本站（小、且要 no-cache），
+   *  只让重的音频字节走 CDN。
+   *
+   *  ⚠️ 用 CDN 时对象存储必须允许跨域（响应带 Access-Control-Allow-Origin）。
+   *     预热走的是 fetch()，跨域没有 CORS 头会被浏览器直接拦掉。
+   *     拦掉的后果是温和的：预热失败、自动退回下面的直连播放，不会报错刷屏，
+   *     只是"点击即有"没了。 */
+  let audioBase = new URL("audio/", location.href);
   function audioUrl(file) {
-    return new URL(file, AUDIO_BASE).href;
+    return new URL(file, audioBase).href;
   }
 
   /* ---------- 预热：把"点击后才下载"改成"进导播就后台下好" ----------
@@ -122,7 +136,10 @@
 
   let warmStarted = false;
   function warmCache() {
-    if (warmStarted) return;
+    // 清单没到就先不启动，也**不要**把 warmStarted 钉死 —— 否则用户在清单
+    // 加载完之前就点了"进入导播台"（首字节 2~12 秒，这很常见），这里空转一次
+    // 就再也不会预热了，等于把预热整个丢掉。load() 完成后会带着 active 再调一次。
+    if (warmStarted || !manifest || !active) return;
     warmStarted = true;
 
     const track = effectiveTrack();
@@ -194,11 +211,20 @@
       .then((r) => (r.ok ? r.json() : null))
       .then((m) => {
         manifest = m || { music: [], voice: [] };
+        // 清单里给了 baseUrl 就把音频基准切过去（国内对象存储/CDN）。
+        // 必须在下面任何 audioUrl() 被用到之前定好 —— syncMusic() 紧随其后。
+        if (manifest.baseUrl) {
+          try { audioBase = new URL(manifest.baseUrl, location.href); }
+          catch { /* 写错了就沿用本站 audio/，不要因为一个配置错误整个不出声 */ }
+        }
         const savedVolume = Number(readStore(VOLUME_STORE, volume));
         volume = Number.isFinite(savedVolume) ? Math.min(1, Math.max(0, savedVolume)) : volume;
         currentKey = resolveKey(readStore(MUSIC_KEY_STORE, DEFAULT_MUSIC_KEY));
         applyVolume();
         syncMusic();
+        // 补一次预热：用户在清单到达之前就进了导播台的话，setActive 那次是空转的。
+        // 没进导播台时 warmCache 自己会直接返回，不会白占带宽。
+        warmCache();
         return manifest;
       })
       .catch(() => { manifest = { music: [], voice: [] }; return manifest; });
@@ -350,6 +376,7 @@
       overridden: peakOverridden,
       enabled: musicEnabled,
       want: wantFile(),                       // 该放的文件的相对路径（关着就是 null）
+      base: audioBase.href,                   // 音频基准（配了 baseUrl 时是 CDN 地址）
       src: bgm.src,
       paused: bgm.paused,
       // paused=false 只说明 play() 被调过；readyState 才证明字节真的到了。

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>页面不存在 · 天权 KPL 全局 BP 系统</title>
+<!--
+  为什么需要这个文件（不是为了好看，是为了关掉一个缓存陷阱）：
+
+  Cloudflare Pages 在没有 404.html 时，会把**任何不存在的路径**回落到
+  index.html 并返回 `200`。而 _headers 里给 /audio/music/* 和 /audio/voice/*
+  设的是 `Cache-Control: public, max-age=31536000, immutable`——
+  这条规则**同样会套到那份回落 HTML 上**。
+
+  后果：只要 manifest.json 里写错一个音频文件名，那个 URL 就会把一份 HTML
+  以 immutable 缓存整整一年。浏览器认为资源已缓存、不会再去问源站，
+  <audio> 拿到 HTML 解码失败、静默不出声，而且**清缓存之前永远好不了**。
+  排查时还看不到 404，因为状态码是 200。
+
+  有了这个文件，未知路径才真的返回 404，上面那条路就走不通了。
+  另外：验证"音频文件在不在"时，光看状态码会被回落骗到，
+  必须同时确认 Content-Type 是 audio/*（见 test/bgm-peak-check.js 的 reachable()）。
+
+  本文件放在仓库根，sync.mjs 只同步 index.html / js / css / audio，
+  不会覆盖也不会删除它。
+-->
+<style>
+  :root {
+    --bg: #131a2e;
+    --panel: #202950;
+    --border: #3d4a76;
+    --text: #eef1f9;
+    --muted: #a7afcc;
+    --gold: #f5c542;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  }
+  .card {
+    max-width: 460px;
+    width: 100%;
+    text-align: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 34px 28px 30px;
+    box-shadow: 0 12px 40px #0006;
+  }
+  .code {
+    font-size: 52px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--gold);
+    line-height: 1;
+  }
+  h1 { margin: 14px 0 8px; font-size: 19px; font-weight: 600; }
+  p { margin: 0 0 22px; color: var(--muted); font-size: 14px; }
+  a.home {
+    display: inline-block;
+    padding: 10px 26px;
+    border-radius: 9px;
+    background: var(--gold);
+    color: #1a1a1a;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  a.home:hover { filter: brightness(1.08); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="code">404</div>
+    <h1>页面不存在</h1>
+    <p>地址可能输错了，或者这个文件已经被移走。</p>
+    <a class="home" href="/">回到 BP 系统</a>
+  </div>
+</body>
+</html>
